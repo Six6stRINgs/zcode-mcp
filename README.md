@@ -228,7 +228,7 @@ turn finishes.
 ### Model selection & quota
 
 ```
-zcode_models {session_id}                              → what's available, current pick
+zcode_models {}                                        → the full model catalogue (all providers)
 zcode_session_new    {text, model: "GLM-5.3-Flash"}            → start on a chosen model
 zcode_session_set_model {session_id, model: "…$reasoningLevel"} → switch mid-conversation
 zcode_quota {}                                         → plan windows, remaining, reset times
@@ -237,7 +237,9 @@ zcode_quota {}                                         → plan windows, remaini
 Selector format (canonical): `providerId/modelId`, optionally followed by
 `$reasoningLevel`. A bare `modelId` also resolves when it is unique across
 all providers. With no level specified, `high` is preferred when the model
-supports it. Handy when one provider's credentials are cooling down —
+supports it. Without an explicit `model`, `zcode_session_new` defaults to
+the built-in `bigmodel-api/GLM-5.3-Flash` (override with
+`ZCODE_MCP_DEFAULT_MODEL`). Handy when one provider's credentials are cooling down —
 switch models and keep working.
 
 ### Skills

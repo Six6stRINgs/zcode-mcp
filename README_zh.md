@@ -217,14 +217,16 @@ Coding Plan / Start Plan 的限额端点。需要可选依赖：
 ### 模型选择与额度
 
 ```
-zcode_models {session_id}                               → 可用模型与当前选择
+zcode_models {}                                        → 全量模型目录（所有 provider）
 zcode_session_new    {text, model: "GLM-5.3-Flash"}             → 指定模型开对话
 zcode_session_set_model {session_id, model: "…$reasoningLevel"} → 中途切换模型
 zcode_quota {}                                          → 套餐窗口、余量、重置时间
 ```
 
 选择器规范格式：`providerId/modelId`，可追加 `$reasoningLevel`；裸
-`modelId` 在全目录唯一时也可用。未指定档位时优先 `high`（模型支持的话）。某个供应商凭据冷却时，切个模型
+`modelId` 在全目录唯一时也可用。未指定档位时优先 `high`（模型支持的话）。
+不显式指定 `model` 时，`zcode_session_new` 默认使用内置的
+`bigmodel-api/GLM-5.3-Flash`（可用 `ZCODE_MCP_DEFAULT_MODEL` 覆盖）。某个供应商凭据冷却时，切个模型
 继续干活。
 
 ### 技能（Skills）

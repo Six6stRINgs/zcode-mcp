@@ -36,7 +36,7 @@ Two things to internalize before calling anything:
 | `zcode_session_output` | Model's current streaming text, or last completed response |
 | `zcode_session_wait` | Block until the running turn ends; final reply |
 | `zcode_session_stop` | Interrupt the running turn |
-| `zcode_models` | Available models (built-in + Coding Plan) + current selection |
+| `zcode_models` | Standalone: FULL model catalogue across all providers |
 | `zcode_session_set_model` | Switch a conversation's model mid-flight |
 | `zcode_quota` | GLM Coding Plan / Start Plan quota windows |
 | `zcode_session_permissions` | Pending permission/user-input requests pausing a non-yolo turn |
@@ -76,7 +76,7 @@ contents into `text`.
 
 ### Model selection & quota
 
-- `zcode_models {session_id?}` — the FULL catalogue across all providers
+- `zcode_models {}` — the FULL catalogue across all providers (standalone)
   (built-in, Coding Plan / Start Plan, custom), never narrowed by previous
   switches, plus the session's current pick. Probes the catalogue on first
   use when cold.
@@ -96,6 +96,9 @@ contents into `text`.
 - `zcode_quota {}` — plan windows (used / remaining / percentage / next
   reset). Needs the optional `cryptography` package. Check before long
   tasks; if a provider's credentials are cooling down, switch models.
+- **Default model:** without `model`, `zcode_session_new` uses the
+  built-in `bigmodel-api/GLM-5.3-Flash` at reasoning `high`
+  (`ZCODE_MCP_DEFAULT_MODEL` overrides).
 
 ### Observing a running turn
 
