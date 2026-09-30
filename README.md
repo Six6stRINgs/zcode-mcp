@@ -89,6 +89,9 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 | `zcode_session_new` | Open a new conversation, send the first message, block for the reply (or `wait: false` to fire-and-observe). Defaults to the built-in `GLM-5.3-Flash` model. `project: <dir>` attaches it to a project (project-level conversation); `temporary: true` creates a throwaway |
 | `zcode_session_send` | Follow-up message to an existing conversation (desktop-created ones too), with `files` attachments |
 | `zcode_session_status` | Current state: desktop status, turn state, buffered event history with ages |
+| `zcode_session_result` | Machine-readable worker result: status, reply, error, workspace and model |
+| `zcode_session_diff` | Git status, changed files and optional bounded diff for the worker workspace |
+| `zcode_health` | Bridge, Node.js, ZCode CLI and app-server health without creating a conversation |
 | `zcode_session_output` | The model's **current streaming output**, or the last completed response |
 | `zcode_session_read` | Recent message history (role + text) |
 | `zcode_session_wait` | Block until the running turn ends; returns the reply |
@@ -148,6 +151,30 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 |---|---|---|---|
 | `session_id` | string | **required** | Target conversation. |
 | `max_chars` | integer | `4000` | Tail length of the returned text. |
+
+#### `zcode_session_result`
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `session_id` | string | **required** | Target conversation. |
+
+Returns a compact JSON result for orchestration: terminal/turn state, reply,
+error, pending interactions, workspace, mode, and current model.
+
+#### `zcode_session_diff`
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `session_id` | string | **required** | Target conversation whose workspace should be inspected. |
+| `include_diff` | boolean | `false` | Include a bounded unified diff. |
+| `max_chars` | integer | `20000` | Maximum diff characters when `include_diff=true`. |
+
+Returns Git status, changed files, and a diff summary for the session workspace.
+
+#### `zcode_health`
+
+No parameters. Reports bridge, Node.js, ZCode CLI, app-server, and model catalogue
+health without creating a conversation.
 
 #### `zcode_session_decide`
 

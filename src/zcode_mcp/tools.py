@@ -8,10 +8,12 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import time
 from typing import Any
 
-from .appserver import SERVER
+from .appserver import NODE_EXE, SERVER
 from . import config as _config
 from .config import DEFAULT_MODEL, DEFAULT_TIMEOUT, DEFAULT_WS, log
 from .protocol import (
@@ -256,6 +258,112 @@ def tool_zcode_session_output(args: dict) -> str:
     recent = [t for _, t, _ in list(mon.events)[-5:]]
     parts.append(f"recent_events: {recent}")
     return "\n\n".join(parts)
+
+
+def _session_context(sid: str) -> tuple[dict | None, Any]:
+    """Return persisted session metadata and its live monitor."""
+    return find_session(sid), SERVER._monitor(sid)
+
+
+def tool_zcode_session_result(args: dict) -> str:
+    """Return a compact, machine-readable worker result snapshot."""
+    sid = args["session_id"]
+    session, mon = _session_context(sid)
+    if session is None and not mon.events:
+        return f"error: session not found: {sid}"
+    reply = mon.last_response
+    if not reply and mon.turn_state != "running":
+        try:
+            reply = snapshot_last_reply(read_snapshot(sid))
+        except Exception as e:
+            log(f"result snapshot read failed for {sid}: {e}")
+    model = mon.current_model or (SERVER.last_models or {}).get("current")
+    result = {
+        "session_id": sid,
+        "status": mon.last_result_type or mon.turn_state,
+        "turn_state": mon.turn_state,
+        "reply": reply or None,
+        "error": mon.last_error or None,
+        "pending_interactions": len(SERVER.pending_for(sid)),
+        "workspace": (session or {}).get("workspace", {}).get("workspacePath"),
+        "mode": (session or {}).get("mode"),
+        "current_model": (
+            f"{model.get('providerId')}/{model.get('modelId')}"
+            if model else None
+        ),
+    }
+    return json.dumps(result, ensure_ascii=False, indent=1)
+
+
+def _run_git(workspace: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", workspace, *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=15,
+        check=False,
+    )
+
+
+def tool_zcode_session_diff(args: dict) -> str:
+    """Summarize git changes in the worker's project workspace."""
+    sid = args["session_id"]
+    session = find_session(sid)
+    if session is None:
+        return f"error: session not found: {sid}"
+    workspace = (session.get("workspace") or {}).get("workspacePath")
+    if not workspace or not os.path.isdir(workspace):
+        return f"error: workspace not found for session: {sid}"
+    try:
+        root = _run_git(workspace, "rev-parse", "--show-toplevel")
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"error: cannot inspect git workspace: {e}"
+    if root.returncode != 0:
+        return json.dumps({"session_id": sid, "workspace": workspace, "is_git_repo": False}, ensure_ascii=False, indent=1)
+    status = _run_git(workspace, "status", "--short")
+    stat = _run_git(workspace, "diff", "HEAD", "--stat")
+    name_status = _run_git(workspace, "diff", "HEAD", "--name-status")
+    result = {
+        "session_id": sid,
+        "workspace": workspace,
+        "is_git_repo": True,
+        "root": root.stdout.strip(),
+        "status": status.stdout.splitlines(),
+        "changed_files": name_status.stdout.splitlines(),
+        "stat": stat.stdout.strip(),
+    }
+    if args.get("include_diff"):
+        max_chars = max(1, min(int(args.get("max_chars") or 20000), 100000))
+        diff = _run_git(workspace, "diff", "HEAD", "--no-ext-diff", "--", ".")
+        result["diff"] = diff.stdout[:max_chars]
+        result["diff_truncated"] = len(diff.stdout) > max_chars
+    return json.dumps(result, ensure_ascii=False, indent=1)
+
+
+def tool_zcode_health(args: dict) -> str:
+    """Report bridge and app-server health without creating a conversation."""
+    try:
+        zcode_cjs = _config.resolve_zcode_cjs()
+        cjs_ok = os.path.isfile(zcode_cjs)
+    except Exception as e:
+        zcode_cjs = None
+        cjs_ok = False
+        cjs_error = str(e)
+    proc = SERVER._proc
+    app_state = "running" if proc is not None and proc.poll() is None else "not_started"
+    result = {
+        "bridge": "ok",
+        "server_version": getattr(__import__("zcode_mcp"), "__version__", None),
+        "node": {"executable": NODE_EXE, "available": shutil.which(NODE_EXE) is not None or os.path.isfile(NODE_EXE)},
+        "zcode_cli": {"path": zcode_cjs, "available": cjs_ok},
+        "app_server": {"state": app_state, "storage_ready": bool(getattr(SERVER, "_storage_ready", False))},
+        "model_catalog_cached": SERVER.last_models is not None,
+    }
+    if not cjs_ok:
+        result["zcode_cli"]["error"] = cjs_error
+    return json.dumps(result, ensure_ascii=False, indent=1)
 
 
 def tool_zcode_session_permissions(args: dict) -> str:
@@ -574,6 +682,39 @@ TOOLS = [
         },
     },
     {
+        "name": "zcode_session_result",
+        "description": (
+            "Return a compact machine-readable result for a worker session: status, "
+            "reply, error, pending interactions, workspace and current model."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"session_id": {"type": "string"}},
+            "required": ["session_id"],
+        },
+    },
+    {
+        "name": "zcode_session_diff",
+        "description": (
+            "Summarize git changes in a worker's project workspace. Set include_diff=true "
+            "to include a bounded unified diff."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string"},
+                "include_diff": {"type": "boolean"},
+                "max_chars": {"type": "integer", "description": "Maximum diff characters, default 20000."},
+            },
+            "required": ["session_id"],
+        },
+    },
+    {
+        "name": "zcode_health",
+        "description": "Check bridge, Node.js, ZCode CLI and app-server health without creating a conversation.",
+        "inputSchema": {"type": "object", "properties": {}},
+    },
+    {
         "name": "zcode_session_archive",
         "description": (
             "Archive a ZCode conversation: hidden from zcode_list (pass "
@@ -716,6 +857,8 @@ TOOL_IMPL = {
     "zcode_session_send": tool_zcode_session_send,
     "zcode_session_list": tool_zcode_session_list,
     "zcode_session_status": tool_zcode_session_status,
+    "zcode_session_result": tool_zcode_session_result,
+    "zcode_session_diff": tool_zcode_session_diff,
     "zcode_session_output": tool_zcode_session_output,
     "zcode_session_read": tool_zcode_session_read,
     "zcode_session_wait": tool_zcode_session_wait,
@@ -728,4 +871,5 @@ TOOL_IMPL = {
     "zcode_models": tool_zcode_models,
     "zcode_session_set_model": tool_zcode_session_set_model,
     "zcode_quota": tool_zcode_quota,
+    "zcode_health": tool_zcode_health,
 }

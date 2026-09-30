@@ -116,7 +116,7 @@ class RegistryConsistencyTest(unittest.TestCase):
         from zcode_mcp.tools import TOOL_IMPL
 
         for name in TOOL_IMPL:
-            if name in ("zcode_models", "zcode_quota"):
+            if name in ("zcode_models", "zcode_quota", "zcode_health"):
                 self.assertNotIn("session", name)
             else:
                 self.assertIn("session", name)

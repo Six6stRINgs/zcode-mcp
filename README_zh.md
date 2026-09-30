@@ -139,6 +139,28 @@ MCP server。
 | `session_id` | string | **必填** | 目标对话。 |
 | `max_chars` | integer | `4000` | 返回文本的尾部长度上限。 |
 
+#### `zcode_session_result`
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `session_id` | string | **必填** | 目标对话。 |
+
+返回适合 orchestrator 使用的紧凑 JSON：turn 状态、最终回复、错误、待处理交互、工作区、模式和当前模型。
+
+#### `zcode_session_diff`
+
+| 参数 | 类型 | 默认值 | 说明 |
+|---|---|---|---|
+| `session_id` | string | **必填** | 要检查工作区的目标对话。 |
+| `include_diff` | boolean | `false` | 是否包含有界 unified diff。 |
+| `max_chars` | integer | `20000` | `include_diff=true` 时的最大 diff 字符数。 |
+
+返回 session 工作区的 Git 状态、改动文件和 diff 摘要。
+
+#### `zcode_health`
+
+无参数。无需创建对话，即可检查 bridge、Node.js、ZCode CLI、app-server 和模型目录状态。
+
 #### `zcode_session_decide`
 
 | 参数 | 类型 | 默认值 | 说明 |
