@@ -32,6 +32,10 @@ CREDENTIALS_PATH = os.environ.get(
 )
 
 DEFAULT_TIMEOUT = 600
+# Codex-like MCP clients cap a single tools/call at ~300s; any blocking tool
+# must return before that so the orchestrator gets a resumable status instead
+# of a transport error.
+TOOL_BUDGET = int(os.environ.get("ZCODE_MCP_TOOL_BUDGET", "240"))
 DELIVERY_KIND = "desktop-continuous"
 TERMINAL_STATUSES = {"idle", "completed", "error", "paused"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}

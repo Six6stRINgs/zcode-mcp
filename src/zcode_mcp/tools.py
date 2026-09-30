@@ -12,6 +12,7 @@ import time
 from typing import Any
 
 from .appserver import SERVER
+from . import config as _config
 from .config import DEFAULT_TIMEOUT, DEFAULT_WS, log
 from .protocol import (
     _message_texts,
@@ -36,6 +37,12 @@ from .store import (
     session_exists,
     set_session_archived,
 )
+
+
+def _effective_timeout(args: dict) -> int:
+    """Cap the caller's timeout at the client-safe tool budget."""
+    budget = _config.TOOL_BUDGET
+    return max(1, min(int(args.get("timeout_sec") or DEFAULT_TIMEOUT), budget))
 
 
 def _available_from_cache() -> list | None:
@@ -105,7 +112,7 @@ def tool_zcode_new(args: dict) -> str:
         header += "the desktop app shows it under the project)"
     body = run_turn(
         sid, args.get("text", ""), atts or None, args.get("wait", True),
-        args.get("timeout_sec"),
+        _effective_timeout(args),
     )
     return f"{header}\n{body}"
 
@@ -121,7 +128,7 @@ def tool_zcode_send(args: dict) -> str:
     atts += args.get("attachments") or []
     return run_turn(
         sid, args.get("text", ""), atts or None, args.get("wait", True),
-        args.get("timeout_sec"),
+        _effective_timeout(args),
     )
 
 
@@ -336,9 +343,7 @@ def tool_zcode_read(args: dict) -> str:
 
 
 def tool_zcode_wait(args: dict) -> str:
-    status, reply, note = wait_turn(
-        args["session_id"], args.get("timeout_sec") or DEFAULT_TIMEOUT
-    )
+    status, reply, note = wait_turn(args["session_id"], _effective_timeout(args))
     if not reply:
         try:
             reply = snapshot_last_reply(read_snapshot(args["session_id"]))

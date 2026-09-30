@@ -134,6 +134,27 @@ class CreateParamsTest(unittest.TestCase):
             self.assertIn(key, src)
 
 
+class EffectiveTimeoutTest(unittest.TestCase):
+    def test_caps_at_budget(self):
+        import zcode_mcp.config as cfg
+        from zcode_mcp import tools
+
+        self.assertEqual(tools._effective_timeout({"timeout_sec": 9999}), cfg.TOOL_BUDGET)
+        self.assertEqual(tools._effective_timeout({}), min(cfg.DEFAULT_TIMEOUT, cfg.TOOL_BUDGET))
+        self.assertEqual(tools._effective_timeout({"timeout_sec": 30}), 30)
+
+    def test_budget_floor(self):
+        import zcode_mcp.config as cfg
+        from zcode_mcp import tools
+
+        old = cfg.TOOL_BUDGET
+        cfg.TOOL_BUDGET = 0
+        try:
+            self.assertEqual(tools._effective_timeout({}), 1)
+        finally:
+            cfg.TOOL_BUDGET = old
+
+
 class ResolveZcodeCjsTest(unittest.TestCase):
     def test_env_var_wins(self):
         import zcode_mcp.config as cfg

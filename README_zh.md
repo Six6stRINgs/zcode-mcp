@@ -103,7 +103,7 @@ MCP server。
 | `attachments` | object[] | — | 原生 ZCode 附件对象（高级透传）。 |
 | `title_generation` | boolean | `false` | 让 ZCode 自动生成对话标题。 |
 | `wait` | boolean | `true` | 阻塞到 turn 结束；`false` 立即返回 `session_id`。 |
-| `timeout_sec` | integer | `600` | 阻塞时的最长等待秒数。 |
+| `timeout_sec` | integer | `600` | 阻塞时的最长等待秒数（受 `ZCODE_MCP_TOOL_BUDGET` 上限约束，默认 240——超时后 turn 继续运行，再次 `zcode_wait` 续等）。 |
 
 #### `zcode_send`
 
@@ -114,7 +114,7 @@ MCP server。
 | `files` / `attachments` | — | — | 同 `zcode_new`。 |
 | `mode` | enum | — | 不可在此设置；沿用会话自身的模式。 |
 | `wait` | boolean | `true` | 阻塞到 turn 结束。 |
-| `timeout_sec` | integer | `600` | 阻塞时的最长等待秒数。 |
+| `timeout_sec` | integer | `600` | 阻塞时的最长等待秒数（同样受预算上限约束）。 |
 
 #### `zcode_list`
 
@@ -157,7 +157,7 @@ MCP server。
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `session_id` | string | **必填** | 目标对话。 |
-| `timeout_sec` | integer | `600` | 等待运行中 turn 的最长秒数。 |
+| `timeout_sec` | integer | `600` | 等待运行中 turn 的最长秒数（同样受预算上限；再次调用 `zcode_wait` 续等）。 |
 
 #### `zcode_archive`
 
@@ -251,6 +251,7 @@ zcode_archive {session_id, unarchive: true}→ 恢复
 | `ZCODE_MCP_WORKSPACE` | `<仓库>/sandbox` | `zcode_new` 的默认工作区 |
 | `ZCODE_MCP_DEBUG` | 关 | 详细协议日志（`bridge.log`、`child_dump.log`） |
 | `ZCODE_MCP_NO_WARMUP` | 关 | 跳过 initialize 时的 app-server 预热 |
+| `ZCODE_MCP_TOOL_BUDGET` | `240` | 单次阻塞工具调用的时间上限（秒）。Codex 等 MCP 客户端会在 ~300s 掐断 tools/call；桥在此之前返回可续等的 `timeout` 状态，turn 继续运行——再次调用 `zcode_wait` 即可继续收割 |
 | `ZCODE_HOME` | `~/.zcode` | ZCode 共享存储根目录（归档/删除用） |
 | `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | 覆盖会话库路径 |
 | `ZCODE_MCP_TASKS_INDEX` | `$ZCODE_HOME/v2/tasks-index.sqlite` | 覆盖任务索引路径 |

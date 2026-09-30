@@ -20,9 +20,11 @@ Two things to internalize before calling anything:
    (`zcode_wait`), or dispose (`zcode_discard`).
 2. **Calls either block or don't.** By default `zcode_new` / `zcode_send`
    block until the turn ends and return `status` + ZCode's reply text.
-   With `wait: false` they return `session_id` immediately — use this when
-   the task may run longer than your MCP tool timeout (~300s in Codex), then
-   poll and collect.
+   Blocking calls are capped at `ZCODE_MCP_TOOL_BUDGET` (240s) — under MCP
+   clients' ~300s tools/call abort — and a cap hit returns a resumable
+   `timeout` status while the turn keeps running: just call `zcode_wait`
+   again. `wait: false` returns `session_id` immediately if you prefer
+   explicit polling.
 
 ## Tools
 

@@ -111,7 +111,7 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 | `attachments` | object[] | — | Raw ZCode attachment objects (advanced passthrough). |
 | `title_generation` | boolean | `false` | Let ZCode auto-generate the conversation title. |
 | `wait` | boolean | `true` | Block until the turn ends; `false` returns `session_id` immediately. |
-| `timeout_sec` | integer | `600` | Max seconds to wait when blocking. |
+| `timeout_sec` | integer | `600` | Max seconds to wait when blocking (capped at `ZCODE_MCP_TOOL_BUDGET`, default 240 — the turn keeps running past it; call `zcode_wait` again to resume). |
 
 #### `zcode_send`
 
@@ -122,7 +122,7 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 | `files` / `attachments` | — | — | Same as `zcode_new`. |
 | `mode` | enum | — | Not settable here; the session keeps its mode. |
 | `wait` | boolean | `true` | Block until the turn ends. |
-| `timeout_sec` | integer | `600` | Max seconds to wait when blocking. |
+| `timeout_sec` | integer | `600` | Max seconds to wait when blocking (capped at `ZCODE_MCP_TOOL_BUDGET`, default 240 — the turn keeps running past it; call `zcode_wait` again to resume). |
 
 #### `zcode_list`
 
@@ -165,7 +165,7 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `session_id` | string | **required** | Target conversation. |
-| `timeout_sec` | integer | `600` | Max seconds to wait for the running turn. |
+| `timeout_sec` | integer | `600` | Max seconds to wait (same budget cap; re-call `zcode_wait` to keep collecting). |
 
 #### `zcode_archive`
 
@@ -264,6 +264,7 @@ desktop currently has open. The running bridge filters archived sessions from
 | `ZCODE_MCP_WORKSPACE` | `<repo>/sandbox` | Default workspace for `zcode_new` |
 | `ZCODE_MCP_DEBUG` | off | Verbose protocol logging (`bridge.log`, `child_dump.log`) |
 | `ZCODE_MCP_NO_WARMUP` | off | Skip the app-server warm-up spawn |
+| `ZCODE_MCP_TOOL_BUDGET` | `240` | Cap for any single blocking tool call (seconds). MCP clients like Codex abort a tools/call at ~300s; the bridge returns a resumable `timeout` status before that, and the turn keeps running — call `zcode_wait` again to continue collecting |
 | `ZCODE_HOME` | `~/.zcode` | Root of ZCode's shared stores (archive/discard) |
 | `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | Override session store path |
 | `ZCODE_MCP_TASKS_INDEX` | `$ZCODE_HOME/v2/tasks-index.sqlite` | Override desktop task-index path |

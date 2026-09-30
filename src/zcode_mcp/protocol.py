@@ -263,8 +263,8 @@ def wait_turn(sid: str, timeout: float = DEFAULT_TIMEOUT) -> tuple[str, str, str
     if mon.turn_state == "running":
         note = (
             "no terminal event after {t}s — the turn is still live (possibly "
-            "retrying the model request); poll zcode_status / zcode_output, "
-            "or zcode_wait again"
+            "retrying the model request). The turn keeps running; just call "
+            "zcode_wait again to continue collecting."
         ).format(t=timeout)
     else:
         note = f"no terminal event after {timeout}s"

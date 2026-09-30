@@ -53,8 +53,10 @@ zcode_new {project: "…", text: "<task + acceptance criteria>"}
 
 ## Pattern B — fire-and-observe (parallel workers, long tasks)
 
-Use for long tasks or several workers at once. **Required when the task may
-exceed your MCP tool-call timeout (~300s in Codex).**
+Use for long tasks or several workers at once. Blocking calls are also
+safe for long tasks now — the bridge caps them at 240s and returns a
+resumable `timeout` (turn keeps running; call `zcode_wait` again) — but
+fire-and-observe gives you progress visibility in between.
 
 ```
 1. zcode_new {project: "…", text: "…", wait: false}   → session_id at once
