@@ -61,6 +61,12 @@ class SessionMonitor:
             self.last_error = (
                 err.get("message", "unknown") if isinstance(err, dict) else str(err)
             )
+        elif etype == "session.updated":
+            if payload.get("modelId"):
+                self.current_model = {
+                    "providerId": payload.get("providerId"),
+                    "modelId": payload.get("modelId"),
+                }
         elif etype == "state.updated":
             status = (payload.get("patch") or {}).get("status")
             if isinstance(status, str):

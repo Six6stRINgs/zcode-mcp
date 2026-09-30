@@ -70,7 +70,7 @@ def _available_from_cache() -> list | None:
     return available
 
 
-def tool_zcode_new(args: dict) -> str:
+def tool_zcode_session_new(args: dict) -> str:
     project = args.get("project")
     if project:
         project = os.path.abspath(project)
@@ -135,7 +135,7 @@ def tool_zcode_new(args: dict) -> str:
     atts += args.get("attachments") or []
     header = f"session_id={sid}\nworkspace={cwd}"
     if temporary:
-        header += "\n(temporary conversation: discard it with zcode_discard when done)"
+        header += "\n(temporary conversation: discard it with zcode_session_discard when done)"
     if project:
         header += "\n(project conversation: ZCode edits files inside this project; "
         header += "the desktop app shows it under the project)"
@@ -146,7 +146,7 @@ def tool_zcode_new(args: dict) -> str:
     return f"{header}\n{body}"
 
 
-def tool_zcode_send(args: dict) -> str:
+def tool_zcode_session_send(args: dict) -> str:
     sid = args["session_id"]
     if find_session(sid) is None:
         return f"error: session not found: {sid}"
@@ -161,7 +161,7 @@ def tool_zcode_send(args: dict) -> str:
     )
 
 
-def tool_zcode_list(args: dict) -> str:
+def tool_zcode_session_list(args: dict) -> str:
     sessions = session_list()
     if not sessions:
         return "no sessions"
@@ -188,19 +188,38 @@ def tool_zcode_list(args: dict) -> str:
     return "\n".join(lines)
 
 
-def tool_zcode_status(args: dict) -> str:
+def tool_zcode_session_status(args: dict) -> str:
     sid = args["session_id"]
     mon = SERVER._monitor(sid)
     s = find_session(sid)
     if s is None and not mon.events:
         return f"error: session not found: {sid}"
+    current_model = mon.current_model or (SERVER.last_models or {}).get("current")
     info = {
         "session_id": sid,
         "desktop_status": (s or {}).get("status"),
         "title": (s or {}).get("title"),
         "mode": (s or {}).get("mode"),
+        "current_model": (
+            f"{current_model.get('providerId')}/{current_model.get('modelId')}"
+            + (
+                f"${current_model['options']['reasoningLevel']}"
+                if (current_model or {}).get("options", {}).get("reasoningLevel")
+                else ""
+            )
+            if current_model
+            else None
+        ),
         "workspace": (s or {}).get("workspace", {}).get("workspacePath"),
         "updated_at": (s or {}).get("updatedAt"),
+        "turn": {
+            "state": mon.turn_state,
+            "turn_id": mon.turn_id,
+            "stream_chars": len("".join(mon.stream_text)),
+            "last_result_type": mon.last_result_type,
+            "last_error": mon.last_error or None,
+        },
+        "pending_interactions": len(SERVER.pending_for(sid)),
         "monitor": mon.summary(),
         "recent_events": [
             {"type": t, "age_s": round(time.time() - ts, 1)}
@@ -210,7 +229,7 @@ def tool_zcode_status(args: dict) -> str:
     return json.dumps(info, ensure_ascii=False, indent=1)
 
 
-def tool_zcode_output(args: dict) -> str:
+def tool_zcode_session_output(args: dict) -> str:
     sid = args["session_id"]
     max_chars = int(args.get("max_chars") or 4000)
     mon = SERVER._monitor(sid)
@@ -238,7 +257,7 @@ def tool_zcode_output(args: dict) -> str:
     return "\n\n".join(parts)
 
 
-def tool_zcode_permissions(args: dict) -> str:
+def tool_zcode_session_permissions(args: dict) -> str:
     sid = args["session_id"]
     parked = SERVER.pending_for(sid)
     if not parked:
@@ -261,7 +280,7 @@ def tool_zcode_permissions(args: dict) -> str:
     return f"session_id={sid}\n{len(parked)} pending:\n\n" + "\n\n".join(lines)
 
 
-def tool_zcode_decide(args: dict) -> str:
+def tool_zcode_session_decide(args: dict) -> str:
     sid = args.get("session_id")
     rid = str(args["request_id"])
     parked = SERVER.pending_for(sid) if sid else []
@@ -281,51 +300,36 @@ def tool_zcode_decide(args: dict) -> str:
         return f"error: no pending interaction {rid}"
     return (
         f"request_id={rid}\ndecision={decision} sent. The turn continues; "
-        "collect the result with zcode_wait (or keep observing with zcode_status)."
+        "collect the result with zcode_session_wait (or keep observing with zcode_status)."
     )
 
 
 def tool_zcode_models(args: dict) -> str:
-    """Full model catalogue across all providers, plus the current selection.
+    """Standalone: the FULL model catalogue across all providers.
 
-    The catalogue always comes from the bridge cache (probed on demand) —
-    never from a session snapshot, whose list narrows to the chosen provider
-    after a set_model. Reading a session's snapshot mid-turn would also abort
-    the turn, so this tool never calls session/read.
+    Never requires or touches a session; probes the catalogue once when cold.
+    Model identity is canonical ``providerId/modelId``.
     """
-    sid = args.get("session_id")
     try:
         available = _ensure_catalogue()
     except RuntimeError as e:
         return f"error: {e}"
-    mon = SERVER._monitor(sid) if sid else None
-    current = (mon.current_model if mon else None) or (SERVER.last_models or {}).get("current")
-    lines = []
-    if current:
-        cur = f"{current.get('providerId')}/{current.get('modelId')}"
-        lvl = (current.get("options") or {}).get("reasoningLevel")
-        if lvl:
-            cur += f"${lvl}"
-        lines.append(f"current: {cur}")
-    lines.append(f"available models ({len(available)}):")
+    lines = [f"available models ({len(available)}):"]
     for m in available:
-        selector = f"{m['provider_id']}/{m['model_id']}"
-        marker = "  <- current" if current and m.get("provider_id") == current.get(
-            "providerId") and m.get("model_id") == current.get("modelId") else ""
         lines.append(
-            f"- {selector}  label={m.get('label')}  provider={m.get('provider_label')}  "
-            f"ctx={m.get('context_window')}  "
-            f"reasoning={m.get('reasoning_levels')} (default {m.get('default_reasoning')}){marker}"
+            f"- {m['provider_id']}/{m['model_id']}  label={m.get('label')}  "
+            f"provider={m.get('provider_label')}  ctx={m.get('context_window')}  "
+            f"reasoning={m.get('reasoning_levels')} (default {m.get('default_reasoning')})"
         )
     lines.append("")
     lines.append(
         "selector: providerId/modelId or providerId/modelId$reasoningLevel "
-        "(canonical); a bare modelId works only when it is unique across all providers"
+        "(a bare modelId works only when unique across all providers)"
     )
     return chr(10).join(lines)
 
 
-def tool_zcode_set_model(args: dict) -> str:
+def tool_zcode_session_set_model(args: dict) -> str:
     sid = args["session_id"]
     # resolve against the FULL catalogue (cached from a model-less create):
     # after a set_model the session's own available list narrows to the chosen
@@ -367,7 +371,7 @@ def tool_zcode_quota(args: dict) -> str:
     return chr(10).join(lines)
 
 
-def tool_zcode_read(args: dict) -> str:
+def tool_zcode_session_read(args: dict) -> str:
     snap = read_snapshot(args["session_id"], args.get("message_limit") or 50)
     lines = []
     for msg in snap.get("messages") or []:
@@ -381,7 +385,7 @@ def tool_zcode_read(args: dict) -> str:
     return "\n\n".join(lines[-int(args.get("message_limit") or 20) :])
 
 
-def tool_zcode_wait(args: dict) -> str:
+def tool_zcode_session_wait(args: dict) -> str:
     status, reply, note = wait_turn(args["session_id"], _effective_timeout(args))
     # NEVER session/read after a timeout — the turn may still be running and a
     # mid-turn read aborts it (0.16.9)
@@ -396,7 +400,7 @@ def tool_zcode_wait(args: dict) -> str:
     )
 
 
-def tool_zcode_stop(args: dict) -> str:
+def tool_zcode_session_stop(args: dict) -> str:
     try:
         r = stop_session(args["session_id"])
     except RuntimeError as e:
@@ -404,7 +408,7 @@ def tool_zcode_stop(args: dict) -> str:
     return f"stop sent to {args['session_id']}. result: {json.dumps(r, ensure_ascii=False)[:500]}"
 
 
-def tool_zcode_archive(args: dict) -> str:
+def tool_zcode_session_archive(args: dict) -> str:
     sid = args["session_id"]
     unarchive = bool(args.get("unarchive", False))
     if not session_exists(sid):
@@ -420,7 +424,7 @@ def tool_zcode_archive(args: dict) -> str:
     )
 
 
-def tool_zcode_discard(args: dict) -> str:
+def tool_zcode_session_discard(args: dict) -> str:
     sid = args["session_id"]
     confirm = bool(args.get("confirm", False))
     try:
@@ -463,13 +467,13 @@ FILES_DESC = (
 
 TOOLS = [
     {
-        "name": "zcode_new",
+        "name": "zcode_session_new",
         "description": (
             "Open a NEW ZCode conversation (like a human typing in the ZCode desktop "
             "app), send the first message, and (default) block until the turn "
             "completes or fails. Returns session_id, terminal status and ZCode's "
             "reply text. While it runs, other agents can inspect progress with "
-            "zcode_status / zcode_output. Pass project=<dir> to attach the "
+            "zcode_session_status / zcode_session_output. Pass project=<dir> to attach the "
             "conversation to an existing project directory (project-level "
             "conversation: shown under that project in the desktop app, ZCode "
             "edits files there)."
@@ -491,7 +495,7 @@ TOOLS = [
                                                          "(ignored when project is given)."},
                 "temporary": {"type": "boolean",
                               "description": "Create as a throwaway conversation (deferred persistence); "
-                                             "pair with zcode_discard when done."},
+                                             "pair with zcode_session_discard when done."},
                 "model": {"type": "string",
                           "description": "Model selector for the conversation: modelId | "
                                          "providerId/modelId | providerId/modelId$reasoningLevel. "
@@ -504,7 +508,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_send",
+        "name": "zcode_session_send",
         "description": (
             "Send a follow-up message (text and/or file/image attachments) to an "
             "EXISTING ZCode conversation by session_id — desktop-created sessions "
@@ -525,7 +529,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_list",
+        "name": "zcode_session_list",
         "description": (
             "List ZCode conversations across all workspaces (id, status, mode, "
             "title). Archived conversations are hidden by default; pass "
@@ -539,7 +543,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_status",
+        "name": "zcode_session_status",
         "description": (
             "Observability: current state of a ZCode conversation — desktop status, "
             "turn state, buffered event history with ages. Cheap; call any time, "
@@ -552,7 +556,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_output",
+        "name": "zcode_session_output",
         "description": (
             "Observability: the model's CURRENT streaming output for a session "
             "(text produced so far in the running turn), or the last completed "
@@ -569,7 +573,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_archive",
+        "name": "zcode_session_archive",
         "description": (
             "Archive a ZCode conversation: hidden from zcode_list (pass "
             "include_archived=true to see it) and from the desktop sidebar, "
@@ -587,7 +591,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_discard",
+        "name": "zcode_session_discard",
         "description": (
             "PERMANENTLY delete a ZCode conversation (session + full history) — "
             "the throwaway counterpart of zcode_new(temporary=true). Without "
@@ -604,7 +608,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_permissions",
+        "name": "zcode_session_permissions",
         "description": (
             "List pending permission / user-input requests of a conversation in a "
             "non-yolo mode (the turn is paused until each is decided). Use "
@@ -617,7 +621,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_decide",
+        "name": "zcode_session_decide",
         "description": (
             "Answer a pending permission (decision allow/deny, or approve=true/false) "
             "or user-input request of a paused conversation. The turn resumes "
@@ -639,18 +643,14 @@ TOOLS = [
     {
         "name": "zcode_models",
         "description": (
-            "List the models available to a ZCode conversation (built-in, Coding "
-            "Plan / Start Plan providers) with reasoning levels, plus the current "
-            "selection. Without session_id, shows the list cached from the last "
-            "zcode_new."
+            "Standalone: list ALL models across ALL providers configured in ZCode "
+            "(built-in, Coding Plan / Start Plan, custom) with reasoning levels, "
+            "context windows and input capabilities. No conversation required."
         ),
-        "inputSchema": {
-            "type": "object",
-            "properties": {"session_id": {"type": "string"}},
-        },
+        "inputSchema": {"type": "object", "properties": {}},
     },
     {
-        "name": "zcode_set_model",
+        "name": "zcode_session_set_model",
         "description": (
             "Switch the model of an existing conversation (takes effect from the "
             "next message). Selector: modelId | providerId/modelId | "
@@ -675,7 +675,7 @@ TOOLS = [
         "inputSchema": {"type": "object", "properties": {}},
     },
     {
-        "name": "zcode_read",
+        "name": "zcode_session_read",
         "description": "Read the recent messages of a ZCode conversation (role + text per message).",
         "inputSchema": {
             "type": "object",
@@ -687,7 +687,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_wait",
+        "name": "zcode_session_wait",
         "description": "Wait for the running turn of a ZCode conversation to end, then return its reply.",
         "inputSchema": {
             "type": "object",
@@ -699,7 +699,7 @@ TOOLS = [
         },
     },
     {
-        "name": "zcode_stop",
+        "name": "zcode_session_stop",
         "description": "Interrupt/stop the current turn of a ZCode conversation (session/stop).",
         "inputSchema": {
             "type": "object",
@@ -710,19 +710,20 @@ TOOLS = [
 ]
 
 TOOL_IMPL = {
-    "zcode_new": tool_zcode_new,
-    "zcode_send": tool_zcode_send,
-    "zcode_list": tool_zcode_list,
-    "zcode_status": tool_zcode_status,
-    "zcode_output": tool_zcode_output,
-    "zcode_archive": tool_zcode_archive,
-    "zcode_discard": tool_zcode_discard,
-    "zcode_permissions": tool_zcode_permissions,
-    "zcode_decide": tool_zcode_decide,
+    # conversation-scoped
+    "zcode_session_new": tool_zcode_session_new,
+    "zcode_session_send": tool_zcode_session_send,
+    "zcode_session_list": tool_zcode_session_list,
+    "zcode_session_status": tool_zcode_session_status,
+    "zcode_session_read": tool_zcode_session_read,
+    "zcode_session_wait": tool_zcode_session_wait,
+    "zcode_session_stop": tool_zcode_session_stop,
+    "zcode_session_archive": tool_zcode_session_archive,
+    "zcode_session_discard": tool_zcode_session_discard,
+    "zcode_session_permissions": tool_zcode_session_permissions,
+    "zcode_session_decide": tool_zcode_session_decide,
+    # standalone (no session required)
     "zcode_models": tool_zcode_models,
-    "zcode_set_model": tool_zcode_set_model,
+    "zcode_session_set_model": tool_zcode_session_set_model,
     "zcode_quota": tool_zcode_quota,
-    "zcode_read": tool_zcode_read,
-    "zcode_wait": tool_zcode_wait,
-    "zcode_stop": tool_zcode_stop,
 }

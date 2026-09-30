@@ -22,16 +22,16 @@ zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server（桥拉
 ## 特色
 
 - **多轮对话** — 持有 session id 持续续聊，随时纠正方向。
-- **中途可观测** — turn 运行中轮询 `zcode_status` / `zcode_output`，看模型
+- **中途可观测** — turn 运行中轮询 `zcode_session_status` / `zcode_session_output`，看模型
   文本边写边流出；指挥方 agent 不必盲等，可以基于中间输出做判断。
-- **可中断** — `zcode_stop` 随时叫停运行中的 turn。
+- **可中断** — `zcode_session_stop` 随时叫停运行中的 turn。
 - **原生附件** — 文件/图片走 ZCode 自己的附件管线，与桌面端拖拽同款。
 - **生命周期管理** — 临时（一次性）对话、归档/恢复、彻底删除。
 - **桌面互通** — 会话存于共享存储，桌面端可列出、可续聊。
-- **异步发射** — `wait: false` 立即返回，之后用 `zcode_wait` 收割，
+- **异步发射** — `wait: false` 立即返回，之后用 `zcode_session_wait` 收割，
   避开 MCP 客户端的单工具超时。
 - **交互式权限** — 非 yolo 模式可用：turn 因待审批暂停时，编排方 agent
-  通过 `zcode_permissions` 查看待决请求、`zcode_decide` 做决策，turn 恢复。
+  通过 `zcode_session_permissions` 查看待决请求、`zcode_session_decide` 做决策，turn 恢复。
 - **模型选择与额度** — 对话级指定任意模型（内置 / Coding Plan / Start
   Plan 供应商），可中途切换并带 reasoning 档位（未指定时优先 `high`）；
   `zcode_quota` 随时查看套餐额度窗口，长任务前先看余量。
@@ -76,108 +76,108 @@ MCP server。
 
 | 工具 | 作用 |
 |---|---|
-| `zcode_new` | 新建对话并发送首条消息，默认阻塞到回复完成（`wait: false` 异步发射）。默认使用内置 `GLM-5.3-Flash` 模型；`project: <目录>` 挂到真实项目（项目级对话）；`temporary: true` 创建一次性对话 |
-| `zcode_send` | 向既有对话（含桌面端创建的）发后续消息，支持 `files` 文件/图片附件 |
-| `zcode_status` | 当前状态：desktop 状态、turn 生命周期、带时间戳的事件流水 |
-| `zcode_output` | 模型**当前正在流式输出的文本**，或最近一次完成的回复 |
-| `zcode_read` | 读取最近消息历史（角色 + 文本） |
-| `zcode_wait` | 阻塞等待运行中的 turn 结束，返回回复 |
-| `zcode_stop` | 中断运行中的 turn |
+| `zcode_session_new` | 新建对话并发送首条消息，默认阻塞到回复完成（`wait: false` 异步发射）。默认使用内置 `GLM-5.3-Flash` 模型；`project: <目录>` 挂到真实项目（项目级对话）；`temporary: true` 创建一次性对话 |
+| `zcode_session_send` | 向既有对话（含桌面端创建的）发后续消息，支持 `files` 文件/图片附件 |
+| `zcode_session_status` | 当前状态：desktop 状态、turn 生命周期、带时间戳的事件流水 |
+| `zcode_session_output` | 模型**当前正在流式输出的文本**，或最近一次完成的回复 |
+| `zcode_session_read` | 读取最近消息历史（角色 + 文本） |
+| `zcode_session_wait` | 阻塞等待运行中的 turn 结束，返回回复 |
+| `zcode_session_stop` | 中断运行中的 turn |
 | `zcode_models` | **所有** provider 的**所有**模型（内置 + Coding Plan / Start Plan + 自定义）含 reasoning 档位，及会话当前选择——不受 set_model 收窄影响 |
-| `zcode_set_model` | 切换对话模型（对下一条消息生效） |
+| `zcode_session_set_model` | 切换对话模型（对下一条消息生效） |
 | `zcode_quota` | GLM Coding Plan / Start Plan 额度：分窗口用量、余量、下次重置 |
-| `zcode_list` | 列出所有工作区的对话；归档的默认隐藏，`include_archived: true` 可见 |
-| `zcode_archive` | 归档对话（列表隐藏，不删除任何内容）；`unarchive: true` 恢复 |
-| `zcode_discard` | **永久删除**对话（会话 + 全部历史）；不带 `confirm: true` 时仅预演并报告行数 |
-| `zcode_permissions` | 列出暂停中对话的待决权限/用户输入请求（非 yolo 模式） |
-| `zcode_decide` | 应答待决请求（allow/deny）——turn 立即恢复 |
+| `zcode_session_list` | 列出所有工作区的对话；归档的默认隐藏，`include_archived: true` 可见 |
+| `zcode_session_archive` | 归档对话（列表隐藏，不删除任何内容）；`unarchive: true` 恢复 |
+| `zcode_session_discard` | **永久删除**对话（会话 + 全部历史）；不带 `confirm: true` 时仅预演并报告行数 |
+| `zcode_session_permissions` | 列出暂停中对话的待决权限/用户输入请求（非 yolo 模式） |
+| `zcode_session_decide` | 应答待决请求（allow/deny）——turn 立即恢复 |
 
 ### 参数
 
-#### `zcode_new`
+#### `zcode_session_new`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `text` | string | **必填** | 要发送的消息文本。 |
 | `project` | string | — | **已存在**的项目目录绝对路径；创建项目级对话（桌面端归到该项目下）。优先于 `cwd`。 |
 | `cwd` | string | `$ZCODE_MCP_WORKSPACE` | 对话的工作区目录（给了 `project` 时被忽略）。 |
-| `mode` | enum | `yolo` | `plan` / `build` / `edit` / `yolo` / `auto`——权限模式。非 yolo 模式会因审批暂停（见 `zcode_permissions`）。 |
-| `temporary` | boolean | `false` | 一次性对话（deferred 持久化）；用完配 `zcode_discard`。 |
+| `mode` | enum | `yolo` | `plan` / `build` / `edit` / `yolo` / `auto`——权限模式。非 yolo 模式会因审批暂停（见 `zcode_session_permissions`）。 |
+| `temporary` | boolean | `false` | 一次性对话（deferred 持久化）；用完配 `zcode_session_discard`。 |
 | `files` | string[] | — | 附件绝对路径；类型（image/pdf/audio/video/file）按扩展名推断。 |
 | `attachments` | object[] | — | 原生 ZCode 附件对象（高级透传）。 |
 | `title_generation` | boolean | `false` | 让 ZCode 自动生成对话标题。 |
 | `wait` | boolean | `true` | 阻塞到 turn 结束；`false` 立即返回 `session_id`。 |
-| `timeout_sec` | integer | `600` | 阻塞时的最长等待秒数（受 `ZCODE_MCP_TOOL_BUDGET` 上限约束，默认 240——超时后 turn 继续运行，再次 `zcode_wait` 续等）。 |
+| `timeout_sec` | integer | `600` | 阻塞时的最长等待秒数（受 `ZCODE_MCP_TOOL_BUDGET` 上限约束，默认 240——超时后 turn 继续运行，再次 `zcode_session_wait` 续等）。 |
 
-#### `zcode_send`
+#### `zcode_session_send`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `session_id` | string | **必填** | 目标对话（桥或桌面端创建的均可）。 |
 | `text` | string | **必填** | 后续消息文本。 |
-| `files` / `attachments` | — | — | 同 `zcode_new`。 |
+| `files` / `attachments` | — | — | 同 `zcode_session_new`。 |
 | `mode` | enum | — | 不可在此设置；沿用会话自身的模式。 |
 | `wait` | boolean | `true` | 阻塞到 turn 结束。 |
 | `timeout_sec` | integer | `600` | 阻塞时的最长等待秒数（同样受预算上限约束）。 |
 
-#### `zcode_list`
+#### `zcode_session_list`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `include_archived` | boolean | `false` | 同时列出已归档对话（带 `[archived]` 标记）。 |
 
-#### `zcode_status` / `zcode_permissions`
+#### `zcode_session_status` / `zcode_session_permissions`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `session_id` | string | **必填** | 目标对话。 |
 
-#### `zcode_output`
+#### `zcode_session_output`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `session_id` | string | **必填** | 目标对话。 |
 | `max_chars` | integer | `4000` | 返回文本的尾部长度上限。 |
 
-#### `zcode_decide`
+#### `zcode_session_decide`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `request_id` | string | **必填** | 待决请求 id（来自 `zcode_permissions`）。 |
+| `request_id` | string | **必填** | 待决请求 id（来自 `zcode_session_permissions`）。 |
 | `session_id` | string | — | 提供时会与待决请求校验一致性。 |
 | `approve` | boolean | — | 简写：`true`→`allow`，`false`→`deny`。 |
 | `decision` | enum | — | `allow` / `deny` / `escalate` / `modify`（优先于 `approve`）。 |
 | `reason` | string | — | 附带给决策的说明。 |
 
-#### `zcode_read`
+#### `zcode_session_read`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `session_id` | string | **必填** | 目标对话（不能有正在运行的 turn）。 |
 | `message_limit` | integer | `50` | 读取最近多少条消息。 |
 
-#### `zcode_wait`
+#### `zcode_session_wait`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `session_id` | string | **必填** | 目标对话。 |
-| `timeout_sec` | integer | `600` | 等待运行中 turn 的最长秒数（同样受预算上限；再次调用 `zcode_wait` 续等）。 |
+| `timeout_sec` | integer | `600` | 等待运行中 turn 的最长秒数（同样受预算上限；再次调用 `zcode_session_wait` 续等）。 |
 
-#### `zcode_archive`
+#### `zcode_session_archive`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `session_id` | string | **必填** | 目标对话。 |
 | `unarchive` | boolean | `false` | `true` 为恢复而非归档。 |
 
-#### `zcode_discard`
+#### `zcode_session_discard`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `session_id` | string | **必填** | 目标对话。 |
 | `confirm` | boolean | `false` | `false`=预演（报告行数）；`true`=不可恢复地删除。 |
 
-#### `zcode_stop`
+#### `zcode_session_stop`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -187,9 +187,9 @@ MCP server。
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
-| `session_id` | string | — | 读取该会话的列表；省略时用最近一次 `zcode_new` 缓存的目录。 |
+| `session_id` | string | — | 读取该会话的列表；省略时用最近一次 `zcode_session_new` 缓存的目录。 |
 
-#### `zcode_set_model`
+#### `zcode_session_set_model`
 
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
@@ -205,21 +205,21 @@ Coding Plan / Start Plan 的限额端点。需要可选依赖：
 ### 观测模式（A2A 编排的核心用法）
 
 ```
-1. zcode_new {text, wait: false}   → 立刻拿到 session_id（异步发射）
-2. zcode_status {session_id}       → turn 是否在跑、事件流水
-3. zcode_output {session_id}       → 模型当前已流出的文本（边写边看）
-4. zcode_wait  {session_id}        → 收割最终回复
+1. zcode_session_new {text, wait: false}   → 立刻拿到 session_id（异步发射）
+2. zcode_session_status {session_id}       → turn 是否在跑、事件流水
+3. zcode_session_output {session_id}       → 模型当前已流出的文本（边写边看）
+4. zcode_session_wait  {session_id}        → 收割最终回复
 ```
 
-指挥方 agent 中途发现方向不对可以 `zcode_stop` 及时止损，或者提前基于
+指挥方 agent 中途发现方向不对可以 `zcode_session_stop` 及时止损，或者提前基于
 部分输出做判断。
 
 ### 模型选择与额度
 
 ```
 zcode_models {session_id}                               → 可用模型与当前选择
-zcode_new    {text, model: "GLM-5.3-Flash"}             → 指定模型开对话
-zcode_set_model {session_id, model: "…$reasoningLevel"} → 中途切换模型
+zcode_session_new    {text, model: "GLM-5.3-Flash"}             → 指定模型开对话
+zcode_session_set_model {session_id, model: "…$reasoningLevel"} → 中途切换模型
 zcode_quota {}                                          → 套餐窗口、余量、重置时间
 ```
 
@@ -241,15 +241,15 @@ zcode_quota {}                                          → 套餐窗口、余�
 
 ```
 # 一次性问答，用完即走，不留痕迹
-sid = zcode_new {text, temporary: true}    → 临时对话
-… 正常 zcode_send / zcode_wait …
-zcode_discard {session_id: sid}            → 预演：列出将删除的行数
-zcode_discard {session_id: sid, confirm: true} → 永久删除（不可恢复）
+sid = zcode_session_new {text, temporary: true}    → 临时对话
+… 正常 zcode_session_send / zcode_session_wait …
+zcode_session_discard {session_id: sid}            → 预演：列出将删除的行数
+zcode_session_discard {session_id: sid, confirm: true} → 永久删除（不可恢复）
 
 # 保留历史但从列表隐藏
-zcode_archive {session_id}                 → 归档（zcode_list 与桌面侧栏均隐藏）
-zcode_list {include_archived: true}        → 带 [archived] 标记列出
-zcode_archive {session_id, unarchive: true}→ 恢复
+zcode_session_archive {session_id}                 → 归档（zcode_session_list 与桌面侧栏均隐藏）
+zcode_session_list {include_archived: true}        → 带 [archived] 标记列出
+zcode_session_archive {session_id, unarchive: true}→ 恢复
 ```
 
 实现说明：ZCode 协议本身没有归档/删除方法，zcode-mcp 直接维护两个共享
@@ -257,7 +257,7 @@ zcode_archive {session_id, unarchive: true}→ 恢复
 运行时下次启动起从 `session/list` 隐藏）和桌面任务索引
 （`~/.zcode/v2/tasks-index.sqlite` 的 `tasks.archived` / `tasks.deleted`）。
 `discard` 在单事务内按精确 session id 删行，删除前会尽力 stop/close；
-不要 discard 桌面端当前正打开的对话。归档对 `zcode_list` 立即生效
+不要 discard 桌面端当前正打开的对话。归档对 `zcode_session_list` 立即生效
 （桥自己过滤）。
 
 ## 配置（环境变量）
@@ -265,11 +265,11 @@ zcode_archive {session_id, unarchive: true}→ 恢复
 | 变量 | 默认 | 说明 |
 |---|---|---|
 | `ZCODE_CJS` | 自动探测 | 显式指定 ZCode CLI 入口（`<安装目录>/resources/glm/zcode.cjs`）；未设置时自动扫描常见安装位置，找不到会报错并列出已搜索的路径 |
-| `ZCODE_MCP_WORKSPACE` | `<仓库>/sandbox` | `zcode_new` 的默认工作区 |
+| `ZCODE_MCP_WORKSPACE` | `<仓库>/sandbox` | `zcode_session_new` 的默认工作区 |
 | `ZCODE_MCP_DEBUG` | 关 | 详细协议日志（`bridge.log`、`child_dump.log`） |
 | `ZCODE_MCP_NO_WARMUP` | 关 | 跳过 initialize 时的 app-server 预热 |
-| `ZCODE_MCP_DEFAULT_MODEL` | `GLM-5.3-Flash` | `zcode_new` 未指定 `model` 时使用的模型（ZCode 内置 Coding Plan 模型） |
-| `ZCODE_MCP_TOOL_BUDGET` | `240` | 单次阻塞工具调用的时间上限（秒）。Codex 等 MCP 客户端会在 ~300s 掐断 tools/call；桥在此之前返回可续等的 `timeout` 状态，turn 继续运行——再次调用 `zcode_wait` 即可继续收割 |
+| `ZCODE_MCP_DEFAULT_MODEL` | `GLM-5.3-Flash` | `zcode_session_new` 未指定 `model` 时使用的模型（ZCode 内置 Coding Plan 模型） |
+| `ZCODE_MCP_TOOL_BUDGET` | `240` | 单次阻塞工具调用的时间上限（秒）。Codex 等 MCP 客户端会在 ~300s 掐断 tools/call；桥在此之前返回可续等的 `timeout` 状态，turn 继续运行——再次调用 `zcode_session_wait` 即可继续收割 |
 | `ZCODE_HOME` | `~/.zcode` | ZCode 共享存储根目录（归档/删除用） |
 | `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | 覆盖会话库路径 |
 | `ZCODE_MCP_TASKS_INDEX` | `$ZCODE_HOME/v2/tasks-index.sqlite` | 覆盖任务索引路径 |
@@ -282,7 +282,7 @@ zcode_archive {session_id, unarchive: true}→ 恢复
 - `session/create` → `session/subscribe` → `session/send`，然后等待
   `turn.completed` 事件——它的载荷直接带完整回复文本。
 - 每条 `session/event` 通知喂进每会话的环形缓冲（`SessionMonitor`），
-  持续累积 `model.streaming` 的文本增量——这就是 `zcode_output` 的数据源，
+  持续累积 `model.streaming` 的文本增量——这就是 `zcode_session_output` 的数据源，
   其他工具调用并发时也能查。
 - 服务端的反向请求会被应答：运行时偏好（三个布尔）和官方 MCP 身份头
   （空身份，让预置 image-search 插件在无桌面凭据时也能物化）。
@@ -305,7 +305,7 @@ zcode_archive {session_id, unarchive: true}→ 恢复
   不可用；模型与本地工具不受影响。
 - Windows 优先（默认路径指向 Windows 版 ZCode），其余代码全平台可移植。
 - 归档/删除是直接操作共享存储（上游无协议支持）。不要删除桌面端当前
-  正打开的对话；对运行中会话的删除是尽力而为。`zcode_discard` 不可恢复，
+  正打开的对话；对运行中会话的删除是尽力而为。`zcode_session_discard` 不可恢复，
   务必先跑预演。
 
 ## 许可证
