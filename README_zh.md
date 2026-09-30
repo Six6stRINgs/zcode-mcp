@@ -32,6 +32,9 @@ zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server（桥拉
   避开 MCP 客户端的单工具超时。
 - **交互式权限** — 非 yolo 模式可用：turn 因待审批暂停时，编排方 agent
   通过 `zcode_permissions` 查看待决请求、`zcode_decide` 做决策，turn 恢复。
+- **模型选择与额度** — 对话级指定任意模型（内置 / Coding Plan / Start
+  Plan 供应商），可中途切换并带 reasoning 档位（未指定时优先 `high`）；
+  `zcode_quota` 随时查看套餐额度窗口，长任务前先看余量。
 
 ## 环境要求与安装
 
@@ -40,6 +43,7 @@ zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server（桥拉
 - Python ≥ 3.9（纯标准库）
 - Node.js（用 ZCode 桌面端自带的即可）
 - [ZCode](https://zcode.z.ai) 桌面端 / CLI 0.16.x，已登录
+- 可选：`cryptography`——仅 `zcode_quota` 需要（用本地 ZCode OAuth 凭据读套餐额度）
 
 **获取代码并注册到 Codex CLI**
 
@@ -209,6 +213,19 @@ Coding Plan / Start Plan 的限额端点。需要可选依赖：
 
 指挥方 agent 中途发现方向不对可以 `zcode_stop` 及时止损，或者提前基于
 部分输出做判断。
+
+### 模型选择与额度
+
+```
+zcode_models {session_id}                               → 可用模型与当前选择
+zcode_new    {text, model: "GLM-5.3-Flash"}             → 指定模型开对话
+zcode_set_model {session_id, model: "…$reasoningLevel"} → 中途切换模型
+zcode_quota {}                                          → 套餐窗口、余量、重置时间
+```
+
+选择器三种写法：`modelId`、`providerId/modelId`、追加 `$reasoningLevel`。
+未指定档位时优先 `high`（模型支持的话）。某个供应商凭据冷却时，切个模型
+继续干活。
 
 ### 技能（Skills）
 

@@ -38,6 +38,10 @@ zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server (spawned
 - **Interactive permissions** — non-yolo modes work: a paused turn surfaces
   its pending approval via `zcode_permissions`; the orchestrating agent
   decides with `zcode_decide` and the turn resumes.
+- **Model selection & quota** — pick any model (built-in, Coding Plan /
+  Start Plan providers) per conversation, switch mid-flight with reasoning
+  levels (`high` preferred by default), and check plan quota windows with
+  `zcode_quota` before you commit to a long task.
 
 ## Requirements & installation
 
@@ -46,6 +50,8 @@ zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server (spawned
 - Python ≥ 3.9 (stdlib only)
 - Node.js (bundled with the ZCode desktop app is fine)
 - [ZCode](https://zcode.z.ai) desktop app / CLI 0.16.x, logged in
+- Optional: `cryptography` — only for `zcode_quota` (reads the plan quota
+  with your local ZCode OAuth credentials)
 
 **Get the code & register with Codex CLI**
 
@@ -218,6 +224,20 @@ Requires the optional `cryptography` package: `pip install "zcode-mcp[quota]"`.
 A coordinating agent watches progress and bails out early — stop a turn that
 is clearly going the wrong way, or start reviewing partial output before the
 turn finishes.
+
+### Model selection & quota
+
+```
+zcode_models {session_id}                              → what's available, current pick
+zcode_new    {text, model: "GLM-5.3-Flash"}            → start on a chosen model
+zcode_set_model {session_id, model: "…$reasoningLevel"} → switch mid-conversation
+zcode_quota {}                                         → plan windows, remaining, reset times
+```
+
+Selector formats: `modelId`, `providerId/modelId`, or append
+`$reasoningLevel`. With no level specified, `high` is preferred when the
+model supports it. Handy when one provider's credentials are cooling down —
+switch models and keep working.
 
 ### Skills
 
