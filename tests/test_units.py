@@ -104,6 +104,24 @@ class MessageTextsTest(unittest.TestCase):
         self.assertEqual((role, text), ("user", "a"))
 
 
+class RegistryConsistencyTest(unittest.TestCase):
+    def test_every_declared_tool_is_implemented(self):
+        from zcode_mcp.tools import TOOL_IMPL, TOOLS
+
+        declared = {t["name"] for t in TOOLS}
+        self.assertEqual(declared, set(TOOL_IMPL),
+                         f"schema/impl mismatch: {declared ^ set(TOOL_IMPL)}")
+
+    def test_session_tools_carry_session_in_name(self):
+        from zcode_mcp.tools import TOOL_IMPL
+
+        for name in TOOL_IMPL:
+            if name in ("zcode_models", "zcode_quota"):
+                self.assertNotIn("session", name)
+            else:
+                self.assertIn("session", name)
+
+
 class SessionMonitorTest(unittest.TestCase):
     def test_streaming_accumulation_and_reset(self):
         mon = SessionMonitor()

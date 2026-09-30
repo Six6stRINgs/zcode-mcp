@@ -197,7 +197,8 @@ def tool_zcode_session_status(args: dict) -> str:
     current_model = mon.current_model or (SERVER.last_models or {}).get("current")
     info = {
         "session_id": sid,
-        "desktop_status": (s or {}).get("status"),
+        "persisted_status": (s or {}).get("status"),
+        "turn_state": mon.turn_state,
         "title": (s or {}).get("title"),
         "mode": (s or {}).get("mode"),
         "current_model": (
@@ -715,6 +716,7 @@ TOOL_IMPL = {
     "zcode_session_send": tool_zcode_session_send,
     "zcode_session_list": tool_zcode_session_list,
     "zcode_session_status": tool_zcode_session_status,
+    "zcode_session_output": tool_zcode_session_output,
     "zcode_session_read": tool_zcode_session_read,
     "zcode_session_wait": tool_zcode_session_wait,
     "zcode_session_stop": tool_zcode_session_stop,
