@@ -190,7 +190,7 @@ MCP server。
 | 参数 | 类型 | 默认值 | 说明 |
 |---|---|---|---|
 | `session_id` | string | **必填** | 目标对话。 |
-| `model` | string | **必填** | `modelId` / `providerId/modelId` / `providerId/modelId$reasoningLevel`。未给档位时自动套用该模型默认档。 |
+| `model` | string | **必填** | `modelId` / `providerId/modelId` / `providerId/modelId$reasoningLevel`。未给档位时优先套 `high`（模型不支持时用其自带默认档）。 |
 
 #### `zcode_quota`
 

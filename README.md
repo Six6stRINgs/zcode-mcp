@@ -198,7 +198,7 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `session_id` | string | **required** | Target conversation. |
-| `model` | string | **required** | `modelId` / `providerId/modelId` / `providerId/modelId$reasoningLevel`. When no level is given, the model's default is applied. |
+| `model` | string | **required** | `modelId` / `providerId/modelId` / `providerId/modelId$reasoningLevel`. When no level is given, `high` is preferred when the model supports it (otherwise the model's own default). |
 
 #### `zcode_quota`
 

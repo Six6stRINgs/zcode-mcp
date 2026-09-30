@@ -105,7 +105,11 @@ def parse_model_selector(selector: str, available: list[dict]) -> dict:
             ),
             None,
         )
-        if entry and entry.get("default_reasoning"):
+        levels = (entry or {}).get("reasoning_levels") or []
+        if "high" in levels:
+            # project default: prefer "high" over the model's own default
+            selection["options"] = {"reasoningLevel": "high"}
+        elif entry and entry.get("default_reasoning"):
             selection["options"] = {"reasoningLevel": entry["default_reasoning"]}
     return selection
 
@@ -140,7 +144,14 @@ def _decrypt_credential(value: str) -> str:
     )
     key = hashlib.sha256(secret.encode()).digest()
     iv, tag, ct = b64url(iv_b64), b64url(tag_b64), b64url(ct_b64)
-    return AESGCM(key).decrypt(iv, ct + tag, None).decode()
+    try:
+        return AESGCM(key).decrypt(iv, ct + tag, None).decode()
+    except Exception as e:
+        # InvalidTag has an empty str(); say what actually went wrong
+        raise RuntimeError(
+            f"failed to decrypt the ZCode credential (key derivation mismatch: "
+            f"{e!r}); the credentials file belongs to a different user/home?"
+        ) from e
 
 
 def _load_token() -> str:
