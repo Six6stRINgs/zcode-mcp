@@ -76,7 +76,7 @@ MCP server。
 
 | 工具 | 作用 |
 |---|---|
-| `zcode_new` | 新建对话并发送首条消息，默认阻塞到回复完成（`wait: false` 异步发射）；`project: <目录>` 挂到真实项目（项目级对话）；`temporary: true` 创建一次性对话 |
+| `zcode_new` | 新建对话并发送首条消息，默认阻塞到回复完成（`wait: false` 异步发射）。默认使用内置 `GLM-5.3-Flash` 模型；`project: <目录>` 挂到真实项目（项目级对话）；`temporary: true` 创建一次性对话 |
 | `zcode_send` | 向既有对话（含桌面端创建的）发后续消息，支持 `files` 文件/图片附件 |
 | `zcode_status` | 当前状态：desktop 状态、turn 生命周期、带时间戳的事件流水 |
 | `zcode_output` | 模型**当前正在流式输出的文本**，或最近一次完成的回复 |
@@ -268,6 +268,7 @@ zcode_archive {session_id, unarchive: true}→ 恢复
 | `ZCODE_MCP_WORKSPACE` | `<仓库>/sandbox` | `zcode_new` 的默认工作区 |
 | `ZCODE_MCP_DEBUG` | 关 | 详细协议日志（`bridge.log`、`child_dump.log`） |
 | `ZCODE_MCP_NO_WARMUP` | 关 | 跳过 initialize 时的 app-server 预热 |
+| `ZCODE_MCP_DEFAULT_MODEL` | `GLM-5.3-Flash` | `zcode_new` 未指定 `model` 时使用的模型（ZCode 内置 Coding Plan 模型） |
 | `ZCODE_MCP_TOOL_BUDGET` | `240` | 单次阻塞工具调用的时间上限（秒）。Codex 等 MCP 客户端会在 ~300s 掐断 tools/call；桥在此之前返回可续等的 `timeout` 状态，turn 继续运行——再次调用 `zcode_wait` 即可继续收割 |
 | `ZCODE_HOME` | `~/.zcode` | ZCode 共享存储根目录（归档/删除用） |
 | `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | 覆盖会话库路径 |

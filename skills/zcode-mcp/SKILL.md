@@ -84,6 +84,9 @@ contents into `text`.
   preferred when the model supports it.
 - `zcode_new {model: …}` starts a conversation on that model; a cold bridge
   first probes the catalogue with a throwaway session (invisible).
+- **Default:** without `model`, conversations run on the built-in
+  `GLM-5.3-Flash` (reasoning `high`) — overridable via
+  `ZCODE_MCP_DEFAULT_MODEL`.
 - `zcode_set_model {session_id, model}` switches mid-conversation; applies
   from the next message. After a switch the session's own list narrows to
   that provider — resolution uses the full cached catalogue, so

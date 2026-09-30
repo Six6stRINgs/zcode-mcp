@@ -32,6 +32,9 @@ CREDENTIALS_PATH = os.environ.get(
 )
 
 DEFAULT_TIMEOUT = 600
+# conversations default to this model unless zcode_new gets an explicit
+# `model`; resolved against the session catalogue (bare modelId works)
+DEFAULT_MODEL = os.environ.get("ZCODE_MCP_DEFAULT_MODEL", "GLM-5.3-Flash")
 # Codex-like MCP clients cap a single tools/call at ~300s; any blocking tool
 # must return before that so the orchestrator gets a resumable status instead
 # of a transport error.

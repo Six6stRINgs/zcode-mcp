@@ -86,7 +86,7 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 
 | Tool | Purpose |
 |---|---|
-| `zcode_new` | Open a new conversation, send the first message, block for the reply (or `wait: false` to fire-and-observe). `project: <dir>` attaches it to a project (project-level conversation); `temporary: true` creates a throwaway |
+| `zcode_new` | Open a new conversation, send the first message, block for the reply (or `wait: false` to fire-and-observe). Defaults to the built-in `GLM-5.3-Flash` model. `project: <dir>` attaches it to a project (project-level conversation); `temporary: true` creates a throwaway |
 | `zcode_send` | Follow-up message to an existing conversation (desktop-created ones too), with `files` attachments |
 | `zcode_status` | Current state: desktop status, turn state, buffered event history with ages |
 | `zcode_output` | The model's **current streaming output**, or the last completed response |
@@ -284,6 +284,7 @@ desktop currently has open. The running bridge filters archived sessions from
 | `ZCODE_MCP_WORKSPACE` | `<repo>/sandbox` | Default workspace for `zcode_new` |
 | `ZCODE_MCP_DEBUG` | off | Verbose protocol logging (`bridge.log`, `child_dump.log`) |
 | `ZCODE_MCP_NO_WARMUP` | off | Skip the app-server warm-up spawn |
+| `ZCODE_MCP_DEFAULT_MODEL` | `GLM-5.3-Flash` | Model used by `zcode_new` when `model` is not given (the ZCode built-in Coding Plan model) |
 | `ZCODE_MCP_TOOL_BUDGET` | `240` | Cap for any single blocking tool call (seconds). MCP clients like Codex abort a tools/call at ~300s; the bridge returns a resumable `timeout` status before that, and the turn keeps running — call `zcode_wait` again to continue collecting |
 | `ZCODE_HOME` | `~/.zcode` | Root of ZCode's shared stores (archive/discard) |
 | `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | Override session store path |

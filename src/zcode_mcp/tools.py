@@ -13,7 +13,7 @@ from typing import Any
 
 from .appserver import SERVER
 from . import config as _config
-from .config import DEFAULT_TIMEOUT, DEFAULT_WS, log
+from .config import DEFAULT_MODEL, DEFAULT_TIMEOUT, DEFAULT_WS, log
 from .protocol import (
     _message_texts,
     build_attachments,
@@ -81,11 +81,30 @@ def tool_zcode_new(args: dict) -> str:
         except Exception:
             pass
     selection = None
-    if args.get("model"):
+    selector = args.get("model") or DEFAULT_MODEL
+    if selector:
+        if _available_from_cache() is None:
+            # resolve needs the catalogue; a cold bridge probes it with a
+            # throwaway deferred session (invisible, closed right after)
+            try:
+                probe = create_session(cwd=cwd, mode="yolo",
+                                       title_generation=False, persistence="deferred")
+            except Exception as e:
+                if args.get("model"):
+                    return f"error: cannot probe model list: {e}"
+                log(f"model catalogue probe failed ({e}); using runtime default")
+            else:
+                try:
+                    SERVER.request("session/close", {"sessionId": probe}, timeout=15)
+                except Exception:
+                    pass
         try:
-            selection = parse_model_selector(args["model"], _available_from_cache() or [])
+            selection = parse_model_selector(selector, _available_from_cache() or [])
         except ValueError as e:
-            return f"error: {e}"
+            if args.get("model"):
+                return f"error: {e}"
+            log(f"default model {selector!r} unresolved ({e}); using runtime default")
+            selection = None
     sid = create_session(
         cwd=cwd,
         mode=args.get("mode") or "yolo",
