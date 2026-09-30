@@ -59,11 +59,13 @@ resumable `timeout` (turn keeps running; call `zcode_session_wait` again) — bu
 fire-and-observe gives you progress visibility in between.
 
 ```
-1. zcode_session_new {project: "…", text: "…", wait: false}   → session_id at once
-2. zcode_session_status {session_id}      → is the turn running? event history
-3. zcode_session_output {session_id}      → the model's text so far (streaming)
+1. zcode_session_new {project: "…", text: "…", wait: false} → session_id at once
+2. zcode_session_status {session_id}     → is the turn running? event history
+3. zcode_session_output {session_id}     → the model's text so far (streaming)
 4. … do your own work; poll again later …
 5. zcode_session_wait {session_id}        → final reply
+6. zcode_session_result {session_id}     → structured terminal result
+7. zcode_session_diff {session_id}       → verify workspace changes
 ```
 
 While workers run, you can dispatch more workers, answer the user, or review
@@ -77,8 +79,8 @@ dev's PR:
 
 1. Read the `status` in the reply: `completed` / `failed` / `waiting_input` /
    `timeout`. A `completed (cancelled)` means it was interrupted.
-2. Verify the workspace yourself: run the tests, read changed files, or
-   dispatch a second ZCode session as a read-only reviewer
+2. Verify the workspace yourself: call `zcode_session_result` and `zcode_session_diff`,
+   run the tests, read changed files, or dispatch a second ZCode session as a read-only reviewer
    (`zcode_session_new {project: …, mode: "plan", text: "review …, do not edit files"}`).
 3. Feed concrete defects back with `zcode_session_send {session_id, text: "…"}` — the
    worker keeps its context, so corrections are cheap.

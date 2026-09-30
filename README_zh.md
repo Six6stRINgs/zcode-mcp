@@ -260,6 +260,8 @@ zcode_quota {}                                          → 套餐窗口、余�
   （会话生命周期、项目/临时对话、可观测性）、选型指南。
 - **[`zcode-subagent`](skills/zcode-subagent/SKILL.md)** — 分册：把 ZCode
   当 subagent 工人编排——派发模式、验收闭环、按项目分配工人、生命周期卫生。
+- **[`zcode-code-reviewer`](skills/zcode-code-reviewer/SKILL.md)** — 只读代码
+  审查 worker：按严重性报告问题、独立验证，以及检查工作区没有被修改。
 
 ### 生命周期：临时 / 归档 / 丢弃
 

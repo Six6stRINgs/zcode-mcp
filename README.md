@@ -280,6 +280,9 @@ your client's skills directory (e.g. `~/.codex/skills/` for Codex):
 - **[`zcode-subagent`](skills/zcode-subagent/SKILL.md)** — orchestrating
   ZCode as a subagent worker: dispatch patterns, verification loops,
   per-project workers, lifecycle hygiene.
+- **[`zcode-code-reviewer`](skills/zcode-code-reviewer/SKILL.md)** — read-only
+  ZCode code review worker: severity-ranked findings, independent verification,
+  and workspace-mutation checks.
 
 ### Lifecycle: temporary, archive, discard
 

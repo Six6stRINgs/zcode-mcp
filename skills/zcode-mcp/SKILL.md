@@ -35,6 +35,9 @@ Two things to internalize before calling anything:
 | `zcode_session_status` | JSON state: desktop status, turn state, recent events with ages |
 | `zcode_session_output` | Model's current streaming text, or last completed response |
 | `zcode_session_wait` | Block until the running turn ends; final reply |
+| `zcode_session_result` | Structured worker result for orchestration |
+| `zcode_session_diff` | Git status, changed files, and optional bounded diff |
+| `zcode_health` | Bridge, Node.js, ZCode CLI, app-server and catalogue health |
 | `zcode_session_stop` | Interrupt the running turn |
 | `zcode_models` | Standalone: FULL model catalogue across all providers |
 | `zcode_session_set_model` | Switch a conversation's model mid-flight |
@@ -105,6 +108,7 @@ contents into `text`.
 ```
 zcode_session_status {session_id}   → turn_state, event ages — cheap, any time
 zcode_session_output {session_id}   → the model's text so far (streaming)
+zcode_session_result {session_id}   → structured terminal result for orchestration
 ```
 
 Statuses you can see from a blocked/collected turn:
@@ -116,7 +120,7 @@ Statuses you can see from a blocked/collected turn:
 
 - One-off question, nothing to clean → `zcode_session_new {temporary: true}`, read reply, `zcode_session_discard`.
 - Task touching a repo → `zcode_session_new {project: …}`; verify the workspace
-  yourself afterwards (tests, diffs).
+  yourself afterwards with `zcode_session_result`, `zcode_session_diff`, tests, and diffs.
 - Long or parallel work → `wait: false`, poll `zcode_session_status`/`zcode_session_output`,
   collect with `zcode_session_wait`; `zcode_session_stop` a worker going the wrong way.
 - Follow-up/correction → `zcode_session_send {session_id, …}` — the worker keeps
