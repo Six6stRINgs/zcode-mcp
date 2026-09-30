@@ -93,7 +93,7 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 | `zcode_read` | Recent message history (role + text) |
 | `zcode_wait` | Block until the running turn ends; returns the reply |
 | `zcode_stop` | Interrupt the running turn |
-| `zcode_models` | Available models (built-in + Coding Plan / Start Plan) with reasoning levels, and the current selection |
+| `zcode_models` | **All** models across **all** providers (built-in + Coding Plan / Start Plan + custom) with reasoning levels, and the session's current selection — unaffected by set_model narrowing |
 | `zcode_set_model` | Switch a conversation's model (takes effect from the next message) |
 | `zcode_quota` | GLM Coding Plan / Start Plan quota: per-window usage, remaining, next reset |
 | `zcode_list` | All conversations across workspaces; archived ones hidden unless `include_archived: true` |
@@ -234,9 +234,10 @@ zcode_set_model {session_id, model: "…$reasoningLevel"} → switch mid-convers
 zcode_quota {}                                         → plan windows, remaining, reset times
 ```
 
-Selector formats: `modelId`, `providerId/modelId`, or append
-`$reasoningLevel`. With no level specified, `high` is preferred when the
-model supports it. Handy when one provider's credentials are cooling down —
+Selector format (canonical): `providerId/modelId`, optionally followed by
+`$reasoningLevel`. A bare `modelId` also resolves when it is unique across
+all providers. With no level specified, `high` is preferred when the model
+supports it. Handy when one provider's credentials are cooling down —
 switch models and keep working.
 
 ### Skills

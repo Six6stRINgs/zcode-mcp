@@ -28,6 +28,7 @@ class SessionMonitor:
         self.last_result_type: str = ""
         self.last_error: str = ""
         self.last_status: str = ""
+        self.current_model: dict | None = None
         self.turns_completed: int = 0
 
     def feed(self, env: dict) -> None:

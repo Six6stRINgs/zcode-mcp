@@ -76,12 +76,14 @@ contents into `text`.
 
 ### Model selection & quota
 
-- `zcode_models {session_id?}` — available models (built-in + Coding Plan /
-  Start Plan providers) with reasoning levels and the current pick. Without
-  `session_id` it serves the catalogue cached from the last `zcode_new`.
-- Selectors: `modelId` (`GLM-5.3-Flash`), `providerId/modelId`, or append
-  `$reasoningLevel` (`GLM-5.3-Flash$low`). With no level, `high` is
-  preferred when the model supports it.
+- `zcode_models {session_id?}` — the FULL catalogue across all providers
+  (built-in, Coding Plan / Start Plan, custom), never narrowed by previous
+  switches, plus the session's current pick. Probes the catalogue on first
+  use when cold.
+- Selectors — canonical: `providerId/modelId`, optionally with
+  `$reasoningLevel` (`GLM-5.3-Flash$low`). A bare `modelId` resolves only
+  when unique across all providers. With no level, `high` is preferred
+  when the model supports it.
 - `zcode_new {model: …}` starts a conversation on that model; a cold bridge
   first probes the catalogue with a throwaway session (invisible).
 - **Default:** without `model`, conversations run on the built-in

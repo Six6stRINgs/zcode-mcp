@@ -45,6 +45,23 @@ def _effective_timeout(args: dict) -> int:
     return max(1, min(int(args.get("timeout_sec") or DEFAULT_TIMEOUT), budget))
 
 
+def _ensure_catalogue(cwd: str | None = None) -> list:
+    """Full model catalogue; probes with a throwaway session when cold."""
+    available = _available_from_cache()
+    if available:
+        return available
+    try:
+        probe = create_session(cwd=cwd, mode="yolo",
+                               title_generation=False, persistence="deferred")
+    except Exception as e:
+        raise RuntimeError(f"cannot probe model catalogue: {e}")
+    try:
+        SERVER.request("session/close", {"sessionId": probe}, timeout=15)
+    except Exception:
+        pass
+    return _available_from_cache() or []
+
+
 def _available_from_cache() -> list | None:
     """Simplified available-model list from the last session/create snapshot."""
     if SERVER.last_models is None:
@@ -68,18 +85,11 @@ def tool_zcode_new(args: dict) -> str:
         cwd = args.get("cwd") or DEFAULT_WS
         os.makedirs(cwd, exist_ok=True)
     temporary = bool(args.get("temporary", False))
-    if args.get("model") and _available_from_cache() is None:
-        # first model-bearing call on a cold bridge: fetch the full catalogue
-        # with a throwaway probe session, then resolve
-        try:
-            probe = create_session(cwd=cwd, mode="yolo",
-                                   title_generation=False, persistence="deferred")
-        except Exception as e:
-            return f"error: cannot probe model list: {e}"
-        try:
-            SERVER.request("session/close", {"sessionId": probe}, timeout=15)
-        except Exception:
-            pass
+    try:
+        _ensure_catalogue(cwd)
+    except RuntimeError as e:
+        if args.get("model"):
+            return f"error: {e}"
     selection = None
     selector = args.get("model") or DEFAULT_MODEL
     if selector:
@@ -276,53 +286,63 @@ def tool_zcode_decide(args: dict) -> str:
 
 
 def tool_zcode_models(args: dict) -> str:
-    """Available models + current selection for a session (or last known)."""
+    """Full model catalogue across all providers, plus the current selection.
+
+    The catalogue always comes from the bridge cache (probed on demand) —
+    never from a session snapshot, whose list narrows to the chosen provider
+    after a set_model. Reading a session's snapshot mid-turn would also abort
+    the turn, so this tool never calls session/read.
+    """
     sid = args.get("session_id")
-    current, available = None, []
-    if sid:
-        try:
-            current, available = _norm_session_models(read_snapshot(sid))
-        except Exception as e:
-            return f"error: cannot read session {sid}: {e}"
-    elif SERVER.last_models:
-        current = SERVER.last_models.get("current")
-        _, available = _norm_session_models({"settings": {"model": SERVER.last_models}})
-    if not available:
-        return (
-            "no model list available yet; create a conversation first "
-            "(zcode_new) or pass session_id"
-        )
-    lines = [f"current: {json.dumps(current, ensure_ascii=False) if current else '?'}"]
+    try:
+        available = _ensure_catalogue()
+    except RuntimeError as e:
+        return f"error: {e}"
+    mon = SERVER._monitor(sid) if sid else None
+    current = (mon.current_model if mon else None) or (SERVER.last_models or {}).get("current")
+    lines = []
+    if current:
+        cur = f"{current.get('providerId')}/{current.get('modelId')}"
+        lvl = (current.get("options") or {}).get("reasoningLevel")
+        if lvl:
+            cur += f"${lvl}"
+        lines.append(f"current: {cur}")
+    lines.append(f"available models ({len(available)}):")
     for m in available:
+        selector = f"{m['provider_id']}/{m['model_id']}"
+        marker = "  <- current" if current and m.get("provider_id") == current.get(
+            "providerId") and m.get("model_id") == current.get("modelId") else ""
         lines.append(
-            f"- {m['provider_id']}/{m['model_id']}  label={m.get('label')}  "
-            f"provider={m.get('provider_label')}  ctx={m.get('context_window')}  "
-            f"reasoning={m.get('reasoning_levels')} (default {m.get('default_reasoning')})"
+            f"- {selector}  label={m.get('label')}  provider={m.get('provider_label')}  "
+            f"ctx={m.get('context_window')}  "
+            f"reasoning={m.get('reasoning_levels')} (default {m.get('default_reasoning')}){marker}"
         )
     lines.append("")
-    lines.append("selector formats: modelId | providerId/modelId | providerId/modelId$level")
+    lines.append(
+        "selector: providerId/modelId or providerId/modelId$reasoningLevel "
+        "(canonical); a bare modelId works only when it is unique across all providers"
+    )
     return chr(10).join(lines)
 
 
 def tool_zcode_set_model(args: dict) -> str:
     sid = args["session_id"]
     # resolve against the FULL catalogue (cached from a model-less create):
-    # after a setModel the session's own available list narrows to the chosen
+    # after a set_model the session's own available list narrows to the chosen
     # provider, which would block cross-provider switches
-    available = _available_from_cache()
-    if not available:
-        try:
-            _, available = _norm_session_models(read_snapshot(sid))
-        except Exception as e:
-            return f"error: cannot read session {sid}: {e}"
     try:
-        selection = parse_model_selector(args["model"], available or [])
+        available = _ensure_catalogue()
+    except RuntimeError as e:
+        return f"error: {e}"
+    try:
+        selection = parse_model_selector(args["model"], available)
     except ValueError as e:
         return f"error: {e}"
     try:
         set_model(sid, selection)
     except RuntimeError as e:
         return f"session_id={sid}" + chr(10) + f"error: model switch failed: {e}"
+    SERVER._monitor(sid).current_model = selection
     header = (
         f"session_id={sid}\n"
         f"model set to {selection['providerId']}/{selection['modelId']}"
@@ -363,7 +383,9 @@ def tool_zcode_read(args: dict) -> str:
 
 def tool_zcode_wait(args: dict) -> str:
     status, reply, note = wait_turn(args["session_id"], _effective_timeout(args))
-    if not reply:
+    # NEVER session/read after a timeout — the turn may still be running and a
+    # mid-turn read aborts it (0.16.9)
+    if not reply and status != "timeout":
         try:
             reply = snapshot_last_reply(read_snapshot(args["session_id"]))
         except Exception:

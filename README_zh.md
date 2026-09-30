@@ -83,7 +83,7 @@ MCP server。
 | `zcode_read` | 读取最近消息历史（角色 + 文本） |
 | `zcode_wait` | 阻塞等待运行中的 turn 结束，返回回复 |
 | `zcode_stop` | 中断运行中的 turn |
-| `zcode_models` | 可用模型列表（内置 + Coding Plan / Start Plan）含 reasoning 档位，及当前选择 |
+| `zcode_models` | **所有** provider 的**所有**模型（内置 + Coding Plan / Start Plan + 自定义）含 reasoning 档位，及会话当前选择——不受 set_model 收窄影响 |
 | `zcode_set_model` | 切换对话模型（对下一条消息生效） |
 | `zcode_quota` | GLM Coding Plan / Start Plan 额度：分窗口用量、余量、下次重置 |
 | `zcode_list` | 列出所有工作区的对话；归档的默认隐藏，`include_archived: true` 可见 |
@@ -223,8 +223,8 @@ zcode_set_model {session_id, model: "…$reasoningLevel"} → 中途切换模型
 zcode_quota {}                                          → 套餐窗口、余量、重置时间
 ```
 
-选择器三种写法：`modelId`、`providerId/modelId`、追加 `$reasoningLevel`。
-未指定档位时优先 `high`（模型支持的话）。某个供应商凭据冷却时，切个模型
+选择器规范格式：`providerId/modelId`，可追加 `$reasoningLevel`；裸
+`modelId` 在全目录唯一时也可用。未指定档位时优先 `high`（模型支持的话）。某个供应商凭据冷却时，切个模型
 继续干活。
 
 ### 技能（Skills）
