@@ -1,0 +1,116 @@
+---
+name: zcode-mcp
+description: "Use this skill when working with the zcode-mcp MCP server: creating or continuing ZCode conversations (zcode_new, zcode_send), observing a running turn (zcode_status, zcode_output), collecting replies (zcode_wait), interrupting (zcode_stop), listing/reading conversations (zcode_list, zcode_read), or managing their lifecycle (zcode_archive, zcode_discard, temporary/project conversations). Triggers on any mention of zcode-mcp, driving ZCode over MCP, session_id handling, attachments, or ZCode conversation lifecycle. For delegation/orchestration patterns (ZCode as a subagent worker), see the zcode-subagent skill."
+---
+
+# zcode-mcp: driving ZCode conversations over MCP
+
+## Overview
+
+zcode-mcp is an MCP server that bridges into [ZCode](https://zcode.z.ai)
+desktop conversations. Every tool talks to a real ZCode conversation — the
+same sessions the desktop app shows — so work done here is visible and
+resumable there.
+
+Two things to internalize before calling anything:
+
+1. **Everything revolves around `session_id`.** Create once
+   (`zcode_new` → returns `session_id`), then send follow-ups
+   (`zcode_send`), observe (`zcode_status` / `zcode_output`), collect
+   (`zcode_wait`), or dispose (`zcode_discard`).
+2. **Calls either block or don't.** By default `zcode_new` / `zcode_send`
+   block until the turn ends and return `status` + ZCode's reply text.
+   With `wait: false` they return `session_id` immediately — use this when
+   the task may run longer than your MCP tool timeout (~300s in Codex), then
+   poll and collect.
+
+## Tools
+
+| Tool | Returns / does |
+|---|---|
+| `zcode_new` | New conversation; first reply. Key params: `project`, `temporary`, `mode`, `wait`, `files` |
+| `zcode_send` | Follow-up to `session_id`; same blocking semantics |
+| `zcode_status` | JSON state: desktop status, turn state, recent events with ages |
+| `zcode_output` | Model's current streaming text, or last completed response |
+| `zcode_wait` | Block until the running turn ends; final reply |
+| `zcode_stop` | Interrupt the running turn |
+| `zcode_models` | Available models (built-in + Coding Plan) + current selection |
+| `zcode_set_model` | Switch a conversation's model mid-flight |
+| `zcode_quota` | GLM Coding Plan / Start Plan quota windows |
+| `zcode_permissions` | Pending permission/user-input requests pausing a non-yolo turn |
+| `zcode_decide` | Answer a pending request (allow/deny) — turn resumes |
+| `zcode_list` | Conversations across workspaces (`include_archived` to see archived) |
+| `zcode_read` | Recent messages of a conversation (only when no turn is running) |
+| `zcode_archive` / `unarchive` | Hide from lists (nothing deleted) / restore |
+| `zcode_discard` | Permanently delete; dry-run row counts unless `confirm: true` |
+
+## Core concepts
+
+### Workspace: project vs sandbox vs temporary
+
+- `zcode_new {project: "D:/path/to/project"}` — **project-level
+  conversation**: attached to an existing directory, ZCode edits its real
+  files, the desktop app groups it under that project. Use for any work
+  that should land in a repo.
+- `zcode_new {text}` without `project` — lands in the bridge's sandbox
+  workspace (env `ZCODE_MCP_WORKSPACE`); fine for questions and scratch.
+- `temporary: true` — throwaway conversation; pair with
+  `zcode_discard {session_id, confirm: true}` when done (dry-run first
+  without `confirm`).
+- `zcode_archive {session_id}` — keep history, hide from lists;
+  `unarchive: true` restores.
+
+### Permission `mode`
+
+`plan` (read-only/review) · `build` · `edit` · `yolo` (autonomous edits —
+default). Pick `plan` for reviewer workers, `yolo` only when the worker is
+meant to actually change files.
+
+### Attachments
+
+`files: ["<abs path>", …]` — like dragging into the desktop composer;
+kind (image/pdf/audio/video/file) is inferred. Prefer this over pasting
+contents into `text`.
+
+### Observing a running turn
+
+```
+zcode_status {session_id}   → turn_state, event ages — cheap, any time
+zcode_output {session_id}   → the model's text so far (streaming)
+```
+
+Statuses you can see from a blocked/collected turn:
+`completed` · `completed (cancelled)` · `failed (…)` · `waiting_input`
+(ZCode asked a question — answer via `zcode_send`) · `waiting_permission`
+(approval needed — `zcode_permissions` then `zcode_decide`, turn resumes) · `timeout`.
+
+## Decision guide
+
+- One-off question, nothing to clean → `zcode_new {temporary: true}`, read reply, `zcode_discard`.
+- Task touching a repo → `zcode_new {project: …}`; verify the workspace
+  yourself afterwards (tests, diffs).
+- Long or parallel work → `wait: false`, poll `zcode_status`/`zcode_output`,
+  collect with `zcode_wait`; `zcode_stop` a worker going the wrong way.
+- Follow-up/correction → `zcode_send {session_id, …}` — the worker keeps
+  its context.
+- Lost track of sessions → `zcode_list` (add `include_archived: true` if
+  needed).
+
+## Sub-skills
+
+- **`zcode-subagent`** — orchestrating ZCode as a subagent worker:
+  dispatch patterns, verification loops, per-project workers, lifecycle
+  hygiene. Read it before building multi-worker or A2A flows.
+
+(Reads as a living index; new sub-skills will be added under the same
+`skills/` directory of the zcode-mcp repository.)
+
+## Caveats
+
+- Codex headless (`codex exec`) rejects MCP calls under its default
+  approval policy — use `--dangerously-bypass-approvals-and-sandbox` or
+  `--approve-for-me` for automation.
+- Keep `text` concise and self-contained (ZCode starts with zero context:
+  goals, acceptance criteria, exact paths); move bulk content into `files`.
+- Never expect a reply mid-turn from `zcode_read` — read only idle
+  conversations; use `zcode_output` for running ones.

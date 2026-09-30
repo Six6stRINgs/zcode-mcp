@@ -1,0 +1,40 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "zcode-mcp"
+version = "0.7.0"
+description = "MCP gateway into ZCode desktop conversations: multi-turn sessions, native attachments, mid-turn status and streaming output"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [{ name = "abang" }]
+keywords = ["mcp", "zcode", "zai", "agent", "a2a", "model-context-protocol"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: Microsoft :: Windows",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3 :: Only",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+]
+
+[project.optional-dependencies]
+quota = ["cryptography>=3.4"]
+
+[project.scripts]
+zcode-mcp = "zcode_mcp.server:main"
+
+[tool.setuptools]
+package-dir = { "" = "src" }
+packages = ["zcode_mcp"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "B"]
+ignore = ["E501"]
