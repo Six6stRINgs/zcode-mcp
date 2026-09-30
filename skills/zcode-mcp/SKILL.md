@@ -1,6 +1,6 @@
 ---
 name: zcode-mcp
-description: "Use this skill when working with the zcode-mcp MCP server: creating or continuing ZCode conversations (zcode_new, zcode_send), observing a running turn (zcode_status, zcode_output), collecting replies (zcode_wait), interrupting (zcode_stop), listing/reading conversations (zcode_list, zcode_read), or managing their lifecycle (zcode_archive, zcode_discard, temporary/project conversations). Triggers on any mention of zcode-mcp, driving ZCode over MCP, session_id handling, attachments, or ZCode conversation lifecycle. For delegation/orchestration patterns (ZCode as a subagent worker), see the zcode-subagent skill."
+description: "Use this skill when working with the zcode-mcp MCP server: creating or continuing ZCode conversations (zcode_new, zcode_send), choosing or switching models (zcode_models, zcode_set_model, zcode_quota — GLM Coding Plan / Start Plan quota), observing a running turn (zcode_status, zcode_output), collecting replies (zcode_wait), interrupting (zcode_stop), deciding permission requests (zcode_permissions, zcode_decide), listing/reading conversations (zcode_list, zcode_read), or managing their lifecycle (zcode_archive, zcode_discard, temporary/project conversations). Triggers on any mention of zcode-mcp, driving ZCode over MCP, session_id handling, attachments, model selection, plan quota, or ZCode conversation lifecycle. For delegation/orchestration patterns (ZCode as a subagent worker), see the zcode-subagent skill."
 ---
 
 # zcode-mcp: driving ZCode conversations over MCP
@@ -30,7 +30,7 @@ Two things to internalize before calling anything:
 
 | Tool | Returns / does |
 |---|---|
-| `zcode_new` | New conversation; first reply. Key params: `project`, `temporary`, `mode`, `wait`, `files` |
+| `zcode_new` | New conversation; first reply. Key params: `project`, `model`, `temporary`, `mode`, `wait`, `files` |
 | `zcode_send` | Follow-up to `session_id`; same blocking semantics |
 | `zcode_status` | JSON state: desktop status, turn state, recent events with ages |
 | `zcode_output` | Model's current streaming text, or last completed response |
@@ -74,6 +74,24 @@ meant to actually change files.
 kind (image/pdf/audio/video/file) is inferred. Prefer this over pasting
 contents into `text`.
 
+### Model selection & quota
+
+- `zcode_models {session_id?}` — available models (built-in + Coding Plan /
+  Start Plan providers) with reasoning levels and the current pick. Without
+  `session_id` it serves the catalogue cached from the last `zcode_new`.
+- Selectors: `modelId` (`GLM-5.3-Flash`), `providerId/modelId`, or append
+  `$reasoningLevel` (`GLM-5.3-Flash$low`). With no level, `high` is
+  preferred when the model supports it.
+- `zcode_new {model: …}` starts a conversation on that model; a cold bridge
+  first probes the catalogue with a throwaway session (invisible).
+- `zcode_set_model {session_id, model}` switches mid-conversation; applies
+  from the next message. After a switch the session's own list narrows to
+  that provider — resolution uses the full cached catalogue, so
+  cross-provider switches keep working.
+- `zcode_quota {}` — plan windows (used / remaining / percentage / next
+  reset). Needs the optional `cryptography` package. Check before long
+  tasks; if a provider's credentials are cooling down, switch models.
+
 ### Observing a running turn
 
 ```
@@ -97,6 +115,9 @@ Statuses you can see from a blocked/collected turn:
   its context.
 - Lost track of sessions → `zcode_list` (add `include_archived: true` if
   needed).
+- A worker reports credential cooldown / usage limit →
+  `zcode_set_model` to another provider and `zcode_send` to retry.
+- Before a long expensive task → `zcode_quota` to check remaining windows.
 
 ## Sub-skills
 

@@ -103,6 +103,14 @@ ZCode starts with zero context about your conversation. Include in `text`:
 - `zcode_list {}` shows active conversations (archived hidden);
   `zcode_list {include_archived: true}` shows everything with markers.
 
+## Model choice per worker
+
+- Dispatch with `zcode_new {project: …, model: "GLM-5.3-Flash", …}` to pin a
+  worker's model; levels via `$high` / `$low` (default prefers `high`).
+- `zcode_set_model {session_id, model}` mid-task when a provider's
+  credentials cool down or you want a stronger/cheaper brain for a phase.
+- `zcode_quota {}` before committing to several long workers.
+
 ## Non-yolo workers (interactive permissions)
 
 For work where autonomous edits are not acceptable, run the worker with
