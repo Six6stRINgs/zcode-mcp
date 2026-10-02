@@ -1,17 +1,15 @@
-**zcode-mcp** — MCP gateway into ZCode desktop conversations.
+# zcode-mcp
 
 English | [中文](README_zh.md)
 
----
+Talk to [ZCode](https://zcode.z.ai) — Z.AI's agentic coding app — from any
+MCP client (Codex CLI, Claude Code, Cursor, your own agents).
 
-**Talk to [ZCode](https://zcode.z.ai) — Z.AI's agentic coding app — from any MCP
-client** (Codex CLI, Claude Code, Cursor, your own agents): open conversations,
-send follow-ups with file/image attachments, watch the model's output stream in
-mid-turn, and collect the final reply. Built directly on ZCode's official
-**app-server protocol** — the same channel the desktop app itself uses — so
-bridged sessions are first-class conversations, visible in the desktop app.
-
-Pure Python standard library. Zero runtime dependencies.
+zcode-mcp opens ZCode conversations, keeps them going across turns, and lets
+you watch the model work in real time. It speaks to ZCode through its official
+**app-server protocol** — the same channel the desktop app uses — so every
+conversation you create here is a real one: visible in the desktop app,
+resumable there, and editing real files in your projects.
 
 ```
 MCP client (Codex / Claude / your agent)        ZCode desktop app
@@ -20,90 +18,87 @@ MCP client (Codex / Claude / your agent)        ZCode desktop app
 zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server (spawned)
 ```
 
+Pure Python standard library — the only optional dependency is
+`cryptography`, and only if you want plan-quota reporting.
+
 ## Highlights
 
-- **Multi-turn conversations** — hold a session id, send follow-ups, correct course.
-- **Mid-turn observability** — poll `zcode_session_status` / `zcode_session_output` while a turn
-  runs and see the model's text as it streams. Coordinating agents can make
-  informed decisions instead of waiting blind.
-- **Interruptible** — `zcode_session_stop` cancels a running turn.
-- **Native attachments** — files and images go through ZCode's own attachment
-  pipeline, exactly like dragging them into the desktop composer.
-- **Lifecycle control** — temporary throwaway conversations, archive/unarchive,
-  and permanent discard.
-- **Desktop interoperability** — sessions live in the shared store; the desktop
-  app can list and resume them.
-- **Fire-and-observe** — `wait: false` returns at once; collect later with
-  `zcode_session_wait`, dodging MCP client tool timeouts on long tasks.
-- **Interactive permissions** — non-yolo modes work: a paused turn surfaces
-  its pending approval via `zcode_session_permissions`; the orchestrating agent
-  decides with `zcode_session_decide` and the turn resumes.
-- **Model selection & quota** — pick any model (built-in, Coding Plan /
-  Start Plan providers) per conversation, switch mid-flight with reasoning
-  levels (`high` preferred by default), and check plan quota windows with
-  `zcode_quota` before you commit to a long task.
+- **Multi-turn conversations** — hold a session id, send follow-ups, correct
+  course mid-task.
+- **Mid-turn observability** — poll status and read the model's output while
+  it streams; wait timeouts tell you whether the turn is streaming, thinking,
+  or stalled, with the output so far.
+- **Interactive permissions** — non-yolo modes work: when ZCode asks for
+  approval, the orchestrating agent sees the request, decides, and the turn
+  resumes.
+- **Model selection & quota** — choose any model per conversation (built-in,
+  GLM Coding Plan, Start Plan, custom providers), switch mid-flight, and
+  check all plan quota windows in one call.
+- **Lifecycle control** — project-scoped and throwaway conversations,
+  archive/unarchive, and permanent delete with a dry-run guard.
+- **Native attachments** — files and images go through ZCode's own
+  attachment pipeline, exactly like dragging them into the desktop composer.
+- **Desktop interoperability** — sessions live in the shared store; the
+  desktop app can list and resume everything you create here.
 
 ## Requirements & installation
 
 **Requirements**
 
-- Python ≥ 3.9 (stdlib only)
-- Node.js (bundled with the ZCode desktop app is fine)
-- [ZCode](https://zcode.z.ai) desktop app / CLI 0.16.x, logged in
-- Optional: `cryptography` — only for `zcode_quota` (reads the plan quota
-  with your local ZCode OAuth credentials)
+- Python ≥ 3.9 (stdlib only; `cryptography` optional, for `zcode_quota`)
+- Node.js (the one bundled with the ZCode desktop app is fine)
+- [ZCode](https://zcode.z.ai) desktop app or CLI 0.16.x, logged in
 
-**Get the code & register with Codex CLI**
+**Install & register with Codex CLI**
 
 ```bash
 git clone https://github.com/Six6stRINgs/zcode-mcp.git
-
-# run straight from the clone (uv builds an isolated env for it)
 codex mcp add zcode-mcp -- uvx --from "<path-to>/zcode-mcp" zcode-mcp
-
-# or, once the package is on PyPI:
-codex mcp add zcode-mcp -- uvx zcode-mcp
-
-# or, from a published git repo without cloning:
-codex mcp add zcode-mcp -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp
 ```
 
-No dependencies to install — `uvx` builds an isolated environment from
-`pyproject.toml` automatically. (`pip install -e .` + the `zcode-mcp`
-console entry point works too.)
+`uvx` builds an isolated environment from `pyproject.toml` automatically —
+nothing to install by hand. (Once the package is on PyPI this shortens to
+`uvx zcode-mcp`; `pip install -e .` with the bundled `zcode-mcp` entry point
+also works.)
 
-Headless `codex exec` runs with approval policy `never`, which rejects MCP
-tool calls; automation should use `--dangerously-bypass-approvals-and-sandbox`
-(review what your agents can reach first) or `--approve-for-me`. Interactive
-Codex just prompts once.
+Headless `codex exec` rejects MCP tool calls under its default approval
+policy. For automation use `--dangerously-bypass-approvals-and-sandbox`
+(after reviewing what your agents can reach) or `--approve-for-me`;
+interactive Codex simply asks once.
 
 **Other MCP clients** (Claude Code, Cursor, …): register the same command as
 a stdio MCP server.
 
-Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
-
 ## Tools
+
+Two families, by design:
+
+**Standalone** — no conversation needed:
 
 | Tool | Purpose |
 |---|---|
-| `zcode_session_new` | Open a new conversation, send the first message, block for the reply (or `wait: false` to fire-and-observe). Defaults to the built-in `GLM-5.3-Flash` model. `project: <dir>` attaches it to a project (project-level conversation); `temporary: true` creates a throwaway |
-| `zcode_session_send` | Follow-up message to an existing conversation (desktop-created ones too), with `files` attachments |
-| `zcode_session_status` | Current state: desktop status, turn state, buffered event history with ages |
-| `zcode_session_result` | Machine-readable worker result: status, reply, error, workspace and model |
-| `zcode_session_diff` | Git status, changed files and optional bounded diff for the worker workspace |
-| `zcode_health` | Bridge, Node.js, ZCode CLI and app-server health without creating a conversation |
-| `zcode_session_output` | The model's **current streaming output**, or the last completed response |
-| `zcode_session_read` | Recent message history (role + text) |
+| `zcode_models` | Every model across every configured provider (built-in, Coding Plan / Start Plan, custom), with reasoning levels and context windows |
+| `zcode_quota` | All plan quotas in one call: GLM Coding Plan windows and Start Plan token balances |
+| `zcode_health` | Bridge, Node.js, ZCode CLI and app-server health check |
+
+**Conversation-scoped** — all take a `session_id`:
+
+| Tool | Purpose |
+|---|---|
+| `zcode_session_new` | New conversation + first message; blocks for the reply unless `wait: false` |
+| `zcode_session_send` | Follow-up message (text and/or attachments) |
+| `zcode_session_status` | Live state: model in use, turn state, pending interactions, events |
+| `zcode_session_output` | The model's streaming output right now, or the last reply |
+| `zcode_session_result` | Compact machine-readable result: status, reply, error, model |
+| `zcode_session_diff` | Git status / changed files / bounded diff for the worker's workspace |
+| `zcode_session_read` | Recent message history (idle conversations only) |
 | `zcode_session_wait` | Block until the running turn ends; returns the reply |
 | `zcode_session_stop` | Interrupt the running turn |
-| `zcode_models` | **All** models across **all** providers (built-in + Coding Plan / Start Plan + custom) with reasoning levels, and the session's current selection — unaffected by set_model narrowing |
-| `zcode_session_set_model` | Switch a conversation's model (takes effect from the next message) |
-| `zcode_quota` | All plan quotas: GLM Coding Plan windows + Start Plan token balances (e.g. ZCode Trust Build) |
-| `zcode_session_list` | All conversations across workspaces; archived ones hidden unless `include_archived: true` |
-| `zcode_session_archive` | Archive a conversation (hidden from lists, nothing deleted); `unarchive: true` restores it |
-| `zcode_session_discard` | **Permanently delete** a conversation (session + full history); dry-run row counts unless `confirm: true` |
-| `zcode_session_permissions` | List pending permission / user-input requests pausing a non-yolo conversation |
-| `zcode_session_decide` | Answer a pending request (allow/deny) — the turn resumes immediately |
+| `zcode_session_set_model` | Switch the conversation's model (next message on) |
+| `zcode_session_permissions` | Pending permission / user-input requests |
+| `zcode_session_decide` | Answer a pending request (allow/deny) — turn resumes |
+| `zcode_session_archive` | Hide a conversation from lists (nothing deleted); `unarchive: true` restores |
+| `zcode_session_discard` | Permanently delete (dry-run row counts unless `confirm: true`) |
 
 ### Parameters
 
@@ -111,16 +106,17 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `text` | string | **required** | Message text to send. |
-| `project` | string | — | Absolute path to an **existing** project directory; creates a project-level conversation (desktop groups it under that project). Overrides `cwd`. |
-| `cwd` | string | `$ZCODE_MCP_WORKSPACE` | Workspace directory for the conversation (ignored when `project` is given). |
-| `mode` | enum | `yolo` | `plan` / `build` / `edit` / `yolo` / `auto` — permission mode. Non-yolo modes pause the turn for approvals (see `zcode_session_permissions`). |
-| `temporary` | boolean | `false` | Throwaway conversation (deferred persistence); pair with `zcode_session_discard` when done. |
-| `files` | string[] | — | Absolute paths of files to attach; kind (image/pdf/audio/video/file) inferred from extension. |
+| `text` | string | **required** | First message to send. |
+| `project` | string | — | Absolute path to an existing project directory; the conversation becomes project-scoped and edits land in that repo. Overrides `cwd`. |
+| `cwd` | string | `$ZCODE_MCP_WORKSPACE` | Workspace directory (ignored when `project` is given). |
+| `model` | string | `bigmodel-api/GLM-5.3-Flash` | Selector: `providerId/modelId`, optionally `$reasoningLevel`. `high` is the preferred level when none is given. See `zcode_models`. |
+| `mode` | enum | `yolo` | `plan` / `build` / `edit` / `yolo` / `auto`. Non-yolo modes pause for approvals. |
+| `temporary` | boolean | `false` | Throwaway conversation; pair with `zcode_session_discard`. |
+| `files` | string[] | — | Absolute paths of files to attach. |
 | `attachments` | object[] | — | Raw ZCode attachment objects (advanced passthrough). |
 | `title_generation` | boolean | `false` | Let ZCode auto-generate the conversation title. |
-| `wait` | boolean | `true` | Block until the turn ends; `false` returns `session_id` immediately. |
-| `timeout_sec` | integer | `600` | Max seconds to wait when blocking (capped at `ZCODE_MCP_TOOL_BUDGET`, default 240 — the turn keeps running past it; call `zcode_session_wait` again to resume). |
+| `wait` | boolean | `true` | Block until the turn ends. |
+| `timeout_sec` | integer | `600` | Max seconds to wait; capped by `ZCODE_MCP_TOOL_BUDGET` (default 240). On a cap hit the turn keeps running — call `zcode_session_wait` again. |
 
 #### `zcode_session_send`
 
@@ -129,21 +125,17 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 | `session_id` | string | **required** | Target conversation (bridge- or desktop-created). |
 | `text` | string | **required** | Follow-up message text. |
 | `files` / `attachments` | — | — | Same as `zcode_session_new`. |
-| `mode` | enum | — | Not settable here; the session keeps its mode. |
 | `wait` | boolean | `true` | Block until the turn ends. |
-| `timeout_sec` | integer | `600` | Max seconds to wait when blocking (capped at `ZCODE_MCP_TOOL_BUDGET`, default 240 — the turn keeps running past it; call `zcode_session_wait` again to resume). |
+| `timeout_sec` | integer | `600` | Same budget cap as above. |
 
-#### `zcode_session_list`
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `include_archived` | boolean | `false` | Also list archived conversations (marked `[archived]`). |
-
-#### `zcode_session_status` / `zcode_session_permissions`
+#### `zcode_session_status`
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `session_id` | string | **required** | Target conversation. |
+
+Returns `current_model`, `persisted_status` (desktop store; may lag),
+`turn_state` (live), turn details and the pending-interaction count.
 
 #### `zcode_session_output`
 
@@ -158,33 +150,13 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 |---|---|---|---|
 | `session_id` | string | **required** | Target conversation. |
 
-Returns a compact JSON result for orchestration: terminal/turn state, reply,
-error, pending interactions, workspace, mode, and current model.
-
 #### `zcode_session_diff`
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `session_id` | string | **required** | Target conversation whose workspace should be inspected. |
+| `session_id` | string | **required** | Target conversation (its workspace is inspected). |
 | `include_diff` | boolean | `false` | Include a bounded unified diff. |
-| `max_chars` | integer | `20000` | Maximum diff characters when `include_diff=true`. |
-
-Returns Git status, changed files, and a diff summary for the session workspace.
-
-#### `zcode_health`
-
-No parameters. Reports bridge, Node.js, ZCode CLI, app-server, and model catalogue
-health without creating a conversation.
-
-#### `zcode_session_decide`
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `request_id` | string | **required** | The pending request (from `zcode_session_permissions`). |
-| `session_id` | string | — | Validated against the pending request when given. |
-| `approve` | boolean | — | Shorthand: `true` → `allow`, `false` → `deny`. |
-| `decision` | enum | — | `allow` / `deny` / `escalate` / `modify` (overrides `approve`). |
-| `reason` | string | — | Optional explanation attached to the decision. |
+| `max_chars` | integer | `20000` | Max diff characters when `include_diff` is on. |
 
 #### `zcode_session_read`
 
@@ -198,172 +170,166 @@ health without creating a conversation.
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `session_id` | string | **required** | Target conversation. |
-| `timeout_sec` | integer | `600` | Max seconds to wait (same budget cap; re-call `zcode_session_wait` to keep collecting). |
-
-#### `zcode_session_archive`
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation. |
-| `unarchive` | boolean | `false` | `true` restores instead of archiving. |
-
-#### `zcode_session_discard`
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation. |
-| `confirm` | boolean | `false` | `false` = dry-run (reports row counts); `true` = irreversible delete. |
+| `timeout_sec` | integer | `600` | Same budget cap as above. On timeout the note says whether the turn is streaming, producing or stalled. |
 
 #### `zcode_session_stop`
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
-| `session_id` | string | **required** | Target conversation whose running turn is interrupted. |
-
-#### `zcode_models`
-
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | — | Read that session's list; omit to use the catalogue cached from the last `zcode_session_new`. |
+| `session_id` | string | **required** | Target conversation. |
 
 #### `zcode_session_set_model`
 
 | Parameter | Type | Default | Description |
 |---|---|---|---|
 | `session_id` | string | **required** | Target conversation. |
-| `model` | string | **required** | `modelId` / `providerId/modelId` / `providerId/modelId$reasoningLevel`. When no level is given, `high` is preferred when the model supports it (otherwise the model's own default). |
+| `model` | string | **required** | `providerId/modelId` or `providerId/modelId$reasoningLevel`. |
 
-#### `zcode_quota`
+#### `zcode_session_permissions`
 
-No parameters. Reads, in one call: GLM Coding Plan windows (usage,
-remaining, next reset) and Start Plan token balances (per-model buckets
-like ZCode Trust Build, with expiry) via the local ZCode credentials
-(decrypted in-process, never logged; the request carries the same
-identity headers as the desktop app). Requires the optional
-`cryptography` package: `pip install "zcode-mcp[quota]"`.
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `session_id` | string | **required** | Target conversation. |
 
-### Observability pattern
+#### `zcode_session_decide`
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `request_id` | string | **required** | Pending request id (from `zcode_session_permissions`). |
+| `session_id` | string | — | Validated against the pending request when given. |
+| `approve` | boolean | — | `true` → allow, `false` → deny. |
+| `decision` | enum | — | `allow` / `deny` / `escalate` / `modify` (overrides `approve`). |
+| `reason` | string | — | Optional explanation attached to the decision. |
+
+#### `zcode_session_archive`
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `session_id` | string | **required** | Target conversation. |
+| `unarchive` | boolean | `false` | Restore instead of archive. |
+
+#### `zcode_session_discard`
+
+| Parameter | Type | Default | Description |
+|---|---|---|---|
+| `session_id` | string | **required** | Target conversation. |
+| `confirm` | boolean | `false` | `false` = dry-run (row counts); `true` = irreversible delete. |
+
+#### `zcode_models` / `zcode_quota` / `zcode_health`
+
+No parameters.
+
+## Usage patterns
+
+### Fire-and-observe (long tasks, parallel workers)
 
 ```
-1. zcode_session_new {text: "...", wait: false}     → fires, returns session_id at once
-2. zcode_session_status {session_id}                → turn_state: running, events…
-3. zcode_session_output {session_id}                → the model's text so far (streaming)
-4. zcode_session_wait  {session_id}                 → final reply
+1. zcode_session_new {text, project: "…", wait: false}   → session_id at once
+2. zcode_session_status {session_id}                     → turn running? events?
+3. zcode_session_output {session_id}                     → model's text so far
+4. zcode_session_wait {session_id}                       → final reply
 ```
 
-A coordinating agent watches progress and bails out early — stop a turn that
-is clearly going the wrong way, or start reviewing partial output before the
-turn finishes.
+On a wait timeout the note classifies the live turn as `streaming`,
+`producing` (thinking / running tools) or `stalled`, and includes the output
+so far — so you always know whether to keep waiting or to stop and retry.
 
 ### Model selection & quota
 
 ```
-zcode_models {}                                        → the full model catalogue (all providers)
-zcode_session_new    {text, model: "GLM-5.3-Flash"}            → start on a chosen model
-zcode_session_set_model {session_id, model: "…$reasoningLevel"} → switch mid-conversation
-zcode_quota {}                                         → plan windows, remaining, reset times
+zcode_models {}                                              → full catalogue
+zcode_session_new {text, project: "…", model: "GLM-5.3-Flash"}
+zcode_session_set_model {session_id, model: "…$reasoningLevel"}
+zcode_quota {}                                               → all plan windows & balances
 ```
 
-Selector format (canonical): `providerId/modelId`, optionally followed by
-`$reasoningLevel`. A bare `modelId` also resolves when it is unique across
-all providers. With no level specified, `high` is preferred when the model
-supports it. Without an explicit `model`, `zcode_session_new` defaults to
-the built-in `bigmodel-api/GLM-5.3-Flash` (override with
-`ZCODE_MCP_DEFAULT_MODEL`). Handy when one provider's credentials are cooling down —
-switch models and keep working.
-
-### Skills
-
-Ship-ready skill docs live in [`skills/`](skills/); copy what you need into
-your client's skills directory (e.g. `~/.codex/skills/` for Codex):
-
-- **[`zcode-mcp`](skills/zcode-mcp/SKILL.md)** — the overview: tool
-  inventory, core concepts (session lifecycle, project vs temporary,
-  observability), decision guide.
-- **[`zcode-subagent`](skills/zcode-subagent/SKILL.md)** — orchestrating
-  ZCode as a subagent worker: dispatch patterns, verification loops,
-  per-project workers, lifecycle hygiene.
-- **[`zcode-code-reviewer`](skills/zcode-code-reviewer/SKILL.md)** — read-only
-  ZCode code review worker: severity-ranked findings, independent verification,
-  and workspace-mutation checks.
+Selectors are `providerId/modelId`, optionally `$reasoningLevel`. With no
+level, `high` is preferred when the model supports it. Without `model`,
+conversations default to the built-in `bigmodel-api/GLM-5.3-Flash`
+(override with `ZCODE_MCP_DEFAULT_MODEL`). When one provider's credentials
+are cooling down, switch models and keep working.
 
 ### Lifecycle: temporary, archive, discard
 
 ```
-# throwaway Q&A — no clutter left behind
-sid = zcode_session_new {text, temporary: true}     → deferred-persistence conversation
-… use zcode_session_send / zcode_session_wait as usual …
-zcode_session_discard {session_id: sid}             → dry-run: shows what would be deleted
-zcode_session_discard {session_id: sid, confirm: true} → permanently deleted
+sid = zcode_session_new {text, temporary: true}     → throwaway conversation
+… zcode_session_send / zcode_session_wait …
+zcode_session_discard {session_id: sid}             → dry-run: what would be deleted
+zcode_session_discard {session_id: sid, confirm: true}
 
-# keep history but hide from lists
-zcode_session_archive {session_id}                  → hidden from zcode_session_list + desktop sidebar
+zcode_session_archive {session_id}                  → hide from lists (nothing deleted)
 zcode_session_list {include_archived: true}         → shows it with an [archived] marker
 zcode_session_archive {session_id, unarchive: true} → restored
 ```
 
-Implementation notes: ZCode's protocol has no archive/delete method, so
-zcode-mcp maintains the two shared stores directly — the session store
-(`~/.zcode/cli/db/db.sqlite`, `session.time_archived`; the runtime hides
-archived sessions from `session/list` on its next start) and the desktop task
-index (`~/.zcode/v2/tasks-index.sqlite`, `tasks.archived` / `tasks.deleted`).
-`discard` deletes rows scoped by exact session id in one transaction, after
-best-effort `session/stop` + `session/close`; don't discard a conversation the
-desktop currently has open. The running bridge filters archived sessions from
-`zcode_session_list` itself, so hiding is effective immediately.
+Archive/discard maintain ZCode's two shared stores directly (the protocol
+has no such methods): the session store (`session.time_archived`) and the
+desktop task index (`tasks.archived` / `tasks.deleted`). Never discard a
+conversation the desktop app currently has open.
 
 ## Configuration (environment variables)
 
 | Variable | Default | Purpose |
 |---|---|---|
-| `ZCODE_CJS` | auto-detected | Explicit path to the ZCode CLI entry (`<install dir>/resources/glm/zcode.cjs`). When unset, common install locations are scanned; a clear error names the searched paths if nothing is found |
-| `ZCODE_MCP_WORKSPACE` | `<repo>/sandbox` | Default workspace for `zcode_session_new` |
-| `ZCODE_MCP_DEBUG` | off | Verbose protocol logging (`bridge.log`, `child_dump.log`) |
-| `ZCODE_MCP_NO_WARMUP` | off | Skip the app-server warm-up spawn |
-| `ZCODE_MCP_DEFAULT_MODEL` | `GLM-5.3-Flash` | Model used by `zcode_session_new` when `model` is not given (the ZCode built-in Coding Plan model) |
-| `ZCODE_MCP_TOOL_BUDGET` | `240` | Cap for any single blocking tool call (seconds). MCP clients like Codex abort a tools/call at ~300s; the bridge returns a resumable `timeout` status before that, and the turn keeps running — call `zcode_session_wait` again to continue collecting |
-| `ZCODE_HOME` | `~/.zcode` | Root of ZCode's shared stores (archive/discard) |
-| `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | Override session store path |
-| `ZCODE_MCP_TASKS_INDEX` | `$ZCODE_HOME/v2/tasks-index.sqlite` | Override desktop task-index path |
+| `ZCODE_CJS` | auto-detected | Path to the ZCode CLI entry (`<install dir>/resources/glm/zcode.cjs`). When unset, common install locations are scanned. |
+| `ZCODE_MCP_WORKSPACE` | `<repo>/sandbox` | Default workspace for `zcode_session_new`. |
+| `ZCODE_MCP_DEFAULT_MODEL` | `bigmodel-api/GLM-5.3-Flash` | Model used when `zcode_session_new` gets no `model`. |
+| `ZCODE_MCP_TOOL_BUDGET` | `240` | Cap for any single blocking tool call (seconds). MCP clients like Codex abort a tools/call at ~300s; the bridge returns a resumable timeout before that. |
+| `ZCODE_MCP_DEBUG` | off | Verbose protocol logging (`bridge.log`, `child_dump.log`). |
+| `ZCODE_MCP_NO_WARMUP` | off | Skip the app-server warm-up spawn. |
+| `ZCODE_HOME` | `~/.zcode` | Root of ZCode's shared stores. |
+| `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | Override session store path. |
+| `ZCODE_MCP_TASKS_INDEX` | `$ZCODE_HOME/v2/tasks-index.sqlite` | Override desktop task-index path. |
+| `ZCODE_MCP_CREDENTIALS` | `$ZCODE_HOME/v2/credentials.json` | Override OAuth credential store path (quota). |
+| `ZCODE_MCP_ZCODE_CONFIG` | `$ZCODE_HOME/v2/config.json` | Override provider config path (Start Plan balance). |
+| `ZCODE_MCP_APP_VERSION` | `3.14.4` | `app_version` sent to plan-quota endpoints. |
 
 ## How it works
 
 The bridge spawns one `zcode app-server` child and speaks ZCode Protocol
-(newline-delimited JSON over stdio, no handshake):
+(newline-delimited JSON over stdio, no handshake): `session/create` →
+`session/subscribe` → `session/send`, then it waits for the
+`turn.completed` event, whose payload carries the full reply text.
 
-- `session/create` → `session/subscribe` → `session/send`, then waits for the
-  `turn.completed` event, whose payload carries the full reply text.
-- Every `session/event` notification feeds a per-session ring buffer
-  (`SessionMonitor`), which accumulates `model.streaming` text deltas — that
-  is what `zcode_session_output` serves, even from other concurrent tool calls.
-- Reverse requests from the server are answered: runtime preferences
-  (three booleans) and official-MCP identity headers (empty identity, so the
-  preset image-search plugin materializes without desktop credentials).
+Things we handle so you don't have to (all verified on ZCode 0.16.9):
 
-Protocol landmines we handle for you (verified on 0.16.9 — see
-`src/zcode_mcp/appserver.py` module docstring):
+- never call `session/read` while a turn runs — it silently aborts the turn;
+- subscribe **before** send — a subscription only captures turns that start after it;
+- `session/list` reports `idle` early (and all through model-retry windows) —
+  completion is only trusted from events;
+- the server's reverse requests (runtime preferences, plugin identity
+  headers) are answered so sessions materialize without the desktop app.
 
-- never call `session/read` mid-turn (it silently aborts the running turn);
-- subscribe *before* send (a subscription only captures turns that start after it);
-- `session/list.status` flips to `idle` early — completion must come from events.
+Archive/discard are implemented against ZCode's two shared SQLite stores,
+since the protocol itself has no such methods.
 
-`ref/ZCode` holds a shallow clone of the open-source tree
-([zai-org/ZCode](https://github.com/zai-org/ZCode)) used as protocol
+`ref/` (gitignored) may hold a shallow clone of the open-source tree
+([zai-org/ZCode](https://github.com/zai-org/ZCode)) used as a protocol
 reference during development; it is not part of the package.
 
 ## Known limitations
 
 - Requires a local ZCode install; the app-server protocol is unofficial and
-  may change between ZCode versions (tested against 0.16.9).
+  may change between ZCode versions (tested against 0.16.9 / desktop 3.14.4).
 - Preset official plugin MCPs (e.g. web search) start without desktop
-  credentials in bridge-created sessions, so those specific tools may be
-  unavailable there; the model and local tools are unaffected.
-- Windows-first (paths default to a Windows ZCode install); everything else
-  is portable stdlib.
-- Archive/discard operate on the shared stores directly (no protocol support
-  upstream). Don't discard a conversation the desktop app currently has open;
-  a discard of a running session is best-effort. `zcode_session_discard` is
-  irreversible — always do the dry-run first.
+  credentials in bridge-created sessions; the model and local tools are
+  unaffected.
+- Windows-first (default paths point at a Windows ZCode install); everything
+  else is portable standard library.
+- Don't discard a conversation the desktop app currently has open; discarding
+  a running session is best-effort. `zcode_session_discard` is irreversible —
+  always dry-run first.
+
+## Skills
+
+Ship-ready skill documents live in [`skills/`](skills/); copy what you need
+into your client's skills directory (e.g. `~/.codex/skills/` for Codex):
+
+- **[`zcode-mcp`](skills/zcode-mcp/SKILL.md)** — the overview: tools, core
+  concepts, decision guide.
+- **[`zcode-subagent`](skills/zcode-subagent/SKILL.md)** — orchestrating
+  ZCode as a subagent worker: dispatch patterns, verification loops,
+  permission gating, lifecycle hygiene.
 
 ## License
 
