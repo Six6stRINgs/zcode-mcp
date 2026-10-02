@@ -72,6 +72,11 @@ the MCP registration:
 codex mcp add zcode-mcp --env ZCODE_CJS="D:/Tools/ZCode/resources/glm/zcode.cjs" -- uvx --from "<path-to>/zcode-mcp" zcode-mcp
 ```
 
+On Windows you can also add the directory that contains `zcode.cjs`
+(`…esources\glm`) to the **system environment variable** `ZCODE_CJS`
+(Settings → System → About → Advanced system settings → Environment
+Variables) instead of per-server config — the bridge reads it either way.
+
 Headless `codex exec` rejects MCP tool calls under its default approval
 policy. For automation use `--dangerously-bypass-approvals-and-sandbox`
 (after reviewing what your agents can reach) or `--approve-for-me`;

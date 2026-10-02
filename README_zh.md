@@ -63,6 +63,10 @@ MCP 注册时指定：
 codex mcp add zcode-mcp --env ZCODE_CJS="D:/Tools/ZCode/resources/glm/zcode.cjs" -- uvx --from "<路径>/zcode-mcp" zcode-mcp
 ```
 
+Windows 下也可以在**系统环境变量**里新建 `ZCODE_CJS`，值为 `zcode.cjs`
+所在目录（如 `…esources\glm`）（设置 → 系统 → 关于 → 高级系统设置 →
+环境变量），不必每个 MCP 注册单独配置——桥两种来源都认。
+
 无头 `codex exec` 在默认审批策略下会拒绝 MCP 工具调用。自动化场景请用
 `--dangerously-bypass-approvals-and-sandbox`（先想清楚你的 agent 能碰到
 什么）或 `--approve-for-me`；交互式 Codex 首次调用弹一次审批框即可。
