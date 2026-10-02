@@ -79,29 +79,33 @@ contents into `text`.
 
 ### Model selection & quota
 
-- `zcode_models {}` — the FULL catalogue across all providers (standalone)
-  (built-in, Coding Plan / Start Plan, custom), never narrowed by previous
-  switches, plus the session's current pick. Probes the catalogue on first
-  use when cold.
-- Selectors — canonical: `providerId/modelId`, optionally with
-  `$reasoningLevel` (`GLM-5.3-Flash$low`). A bare `modelId` resolves only
-  when unique across all providers. With no level, `high` is preferred
-  when the model supports it.
+- `zcode_models {}` — the FULL catalogue of session-addressable models
+  (standalone), with provider display names (`CPA/gpt-5.6-luna`,
+  `DeepSeek/deepseek-v4-pro`), never narrowed by previous switches. Also
+  lists the desktop-managed account sources (BigModel 个人 / Start Plan /
+  Z.ai) that sessions can NOT address. Probes the catalogue on first use
+  when cold.
+- Selectors — `providerId/modelId` (canonical), `ProviderName/modelId`
+  (e.g. `CPA/gpt-5.6-luna`; matched case/punctuation-insensitively), each
+  optionally with `$reasoningLevel` (`GLM-5.3-Flash$low`). A bare `modelId`
+  resolves only when unique across all providers. With no level, `high` is
+  preferred when the model supports it.
+- **Default:** without `model`, conversations run on
+  `bigmodel-api/GLM-5.3-Flash` (reasoning `high`) — the BigModel-family
+  channel, named after whatever its provider entry is called; overridable
+  via `ZCODE_MCP_DEFAULT_MODEL`.
 - `zcode_session_new {model: …}` starts a conversation on that model; a cold bridge
   first probes the catalogue with a throwaway session (invisible).
-- **Default:** without `model`, conversations run on the built-in
-  `GLM-5.3-Flash` (reasoning `high`) — overridable via
-  `ZCODE_MCP_DEFAULT_MODEL`.
 - `zcode_session_set_model {session_id, model}` switches mid-conversation; applies
   from the next message. After a switch the session's own list narrows to
   that provider — resolution uses the full cached catalogue, so
   cross-provider switches keep working.
+- Desktop-only sources (Start Plan, BigModel 个人) cannot be set from here —
+  selecting one by name returns guidance; use the ZCode desktop picker or
+  add the plan as a custom provider to make it addressable.
 - `zcode_quota {}` — plan windows (used / remaining / percentage / next
   reset). Needs the optional `cryptography` package. Check before long
   tasks; if a provider's credentials are cooling down, switch models.
-- **Default model:** without `model`, `zcode_session_new` uses the
-  built-in `bigmodel-api/GLM-5.3-Flash` at reasoning `high`
-  (`ZCODE_MCP_DEFAULT_MODEL` overrides).
 
 ### Observing a running turn
 

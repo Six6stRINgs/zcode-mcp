@@ -183,5 +183,127 @@ class SessionMonitorTest(unittest.TestCase):
         self.assertEqual(mon.events[-1][1], "session.updated")
 
 
+def _write_json(path, data):
+    import json
+
+    path.write_text(json.dumps(data), encoding="utf-8")
+
+
+class ProviderRegistryTest(unittest.TestCase):
+    """provider_registry(): merge of provider_config.json + config.json."""
+
+    def setUp(self):
+        import tempfile
+
+        import zcode_mcp.models as models
+
+        self.tmp = Path(tempfile.mkdtemp())
+        self.pc = self.tmp / "provider_config.json"
+        self.v2 = self.tmp / "config.json"
+        self.models = models
+        self._orig = (models.PROVIDER_CONFIG_PATH, models.ZCODE_V2_CONFIG)
+        models.PROVIDER_CONFIG_PATH = str(self.pc)
+        models.ZCODE_V2_CONFIG = str(self.v2)
+
+    def tearDown(self):
+        self.models.PROVIDER_CONFIG_PATH, self.models.ZCODE_V2_CONFIG = self._orig
+
+    def test_merges_both_layers(self):
+        _write_json(self.pc, {"config": {"providerConfigRules": {"providerRules": [
+            {"providerId": "uuid-1", "providerName": "CPA",
+             "config": {"personalModelIds": ["gpt-x"]}},
+            {"providerId": "bigmodel-api", "providerName": "BigModel Coding Plan",
+             "config": {"personalModelIds": []}},
+        ]}}})
+        _write_json(self.v2, {"provider": {
+            "builtin:bigmodel-start-plan": {"name": "Start Plan", "enabled": False,
+                                            "models": {"GLM-5.3-Flash": {}}},
+            "uuid-1": {"name": "CPA"},
+        }})
+        reg = self.models.provider_registry()
+        self.assertEqual(reg["uuid-1"]["name"], "CPA")
+        self.assertEqual(reg["uuid-1"]["origin"], "provider_config")
+        self.assertEqual(reg["bigmodel-api"]["name"], "BigModel Coding Plan")
+        sp = reg["builtin:bigmodel-start-plan"]
+        self.assertEqual(sp["origin"], "config")
+        self.assertFalse(sp["enabled"])
+        self.assertEqual(sp["models"], ["GLM-5.3-Flash"])
+
+    def test_missing_files_give_empty_registry(self):
+        self.models.PROVIDER_CONFIG_PATH = str(self.tmp / "nope.json")
+        self.models.ZCODE_V2_CONFIG = str(self.tmp / "nope2.json")
+        self.assertEqual(self.models.provider_registry(), {})
+
+
+class ProviderAliasTest(unittest.TestCase):
+    """Name-based selector resolution."""
+
+    AVAILABLE = [
+        {"provider_id": "uuid-1", "model_id": "gpt-x", "provider_label": "CPA"},
+        {"provider_id": "bigmodel-api", "model_id": "GLM-5.3",
+         "provider_label": "BigModel Coding Plan"},
+    ]
+    REGISTRY = {
+        "uuid-1": {"name": "CPA"},
+        "bigmodel-api": {"name": "BigModel Coding Plan"},
+        "builtin:bigmodel-start-plan": {"name": "BigModel- Coding Plan"},
+    }
+
+    def _sel(self, selector):
+        from zcode_mcp.models import build_provider_aliases, parse_model_selector
+
+        aliases = build_provider_aliases(self.AVAILABLE, self.REGISTRY)
+        return parse_model_selector(selector, self.AVAILABLE, aliases)
+
+    def test_name_and_punctuation_insensitive(self):
+        self.assertEqual(self._sel("CPA/gpt-x")["providerId"], "uuid-1")
+        self.assertEqual(self._sel("cpa/gpt-x$low")["providerId"], "uuid-1")
+        self.assertEqual(
+            self._sel("bigmodel coding plan/GLM-5.3")["providerId"], "bigmodel-api"
+        )
+        self.assertEqual(
+            self._sel("BigModel-Coding-Plan/GLM-5.3")["providerId"], "bigmodel-api"
+        )
+
+    def test_builtin_suffix_alias(self):
+        with self.assertRaises(ValueError) as ctx:
+            self._sel("start-plan/GLM-5.3-Flash")
+        self.assertIn("not addressable", str(ctx.exception))
+        self.assertIn("builtin:bigmodel-start-plan", str(ctx.exception))
+
+    def test_raw_ids_still_work(self):
+        self.assertEqual(self._sel("uuid-1/gpt-x")["providerId"], "uuid-1")
+        self.assertEqual(self._sel("bigmodel-api/GLM-5.3")["providerId"], "bigmodel-api")
+
+    def test_unknown_provider_lists_known(self):
+        with self.assertRaises(ValueError) as ctx:
+            self._sel("Nope/model-x")
+        self.assertIn("uuid-1", str(ctx.exception))
+
+    def test_name_collision_prefers_addressable(self):
+        # real-world case: a typo'd config.json name collides with the
+        # addressable provider's label; the addressable one must win
+        self.assertEqual(
+            self._sel("bigmodel coding plan/GLM-5.3")["providerId"], "bigmodel-api"
+        )
+
+    def test_ambiguous_addressable_name(self):
+        from zcode_mcp.models import build_provider_aliases, parse_model_selector
+
+        available = self.AVAILABLE + [
+            {"provider_id": "uuid-2", "model_id": "gpt-y", "provider_label": "CPA"},
+        ]
+        aliases = build_provider_aliases(available, self.REGISTRY)
+        with self.assertRaises(ValueError) as ctx:
+            parse_model_selector("CPA/gpt-x", available, aliases)
+        self.assertIn("ambiguous", str(ctx.exception))
+
+    def test_no_aliases_keeps_passthrough(self):
+        from zcode_mcp.models import parse_model_selector
+
+        sel = parse_model_selector("some-unknown/x", self.AVAILABLE)
+        self.assertEqual(sel["providerId"], "some-unknown")
+
+
 if __name__ == "__main__":
     unittest.main()

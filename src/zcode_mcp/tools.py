@@ -30,8 +30,9 @@ from .protocol import (
     subscribe,
     wait_turn,
 )
-from .models import (_norm_session_models, fetch_quota,
-                     fetch_start_plan_balances, parse_model_selector)
+from .models import (_norm_session_models, build_provider_aliases, fetch_quota,
+                     fetch_start_plan_balances, parse_model_selector,
+                     provider_registry)
 from .store import (
     archived_session_ids,
     discard_scope,
@@ -72,6 +73,11 @@ def _available_from_cache() -> list | None:
     return available
 
 
+def _aliases_for(available: list) -> dict:
+    """Provider display-name → id candidates for the current catalogue."""
+    return build_provider_aliases(available or [])
+
+
 def tool_zcode_session_new(args: dict) -> str:
     project = args.get("project")
     if project:
@@ -97,7 +103,11 @@ def tool_zcode_session_new(args: dict) -> str:
     selector = args.get("model") or DEFAULT_MODEL
     if selector:
         try:
-            selection = parse_model_selector(selector, _available_from_cache() or [])
+            selection = parse_model_selector(
+                selector,
+                _available_from_cache() or [],
+                _aliases_for(_available_from_cache() or []),
+            )
         except ValueError as e:
             if args.get("model"):
                 return f"error: {e}"
@@ -404,23 +414,45 @@ def tool_zcode_models(args: dict) -> str:
     """Standalone: the FULL model catalogue across all providers.
 
     Never requires or touches a session; probes the catalogue once when cold.
-    Model identity is canonical ``providerId/modelId``.
+    Model identity is canonical ``providerId/modelId``; display names come
+    from the ZCode provider registries and are also valid selector forms.
     """
     try:
         available = _ensure_catalogue()
     except RuntimeError as e:
         return f"error: {e}"
+    registry = provider_registry()
+    addressable = {m.get("provider_id") for m in available if m.get("provider_id")}
     lines = [f"available models ({len(available)}):"]
     for m in available:
+        pid = m.get("provider_id") or ""
+        name = (registry.get(pid) or {}).get("name") or m.get("provider_label") or pid
+        shown = f"{name}/{m['model_id']}" if name != pid else f"{pid}/{m['model_id']}"
+        idpart = "" if name == pid else f"  id={pid}/{m['model_id']}"
         lines.append(
-            f"- {m['provider_id']}/{m['model_id']}  label={m.get('label')}  "
-            f"provider={m.get('provider_label')}  ctx={m.get('context_window')}  "
+            f"- {shown}{idpart}  ctx={m.get('context_window')}  "
             f"reasoning={m.get('reasoning_levels')} (default {m.get('default_reasoning')})"
         )
+    desktop_only = [
+        (pid, info) for pid, info in sorted(registry.items())
+        if pid not in addressable
+    ]
+    if desktop_only:
+        lines.append("")
+        lines.append(
+            "desktop-managed sources (logged-in/account providers in ZCode's "
+            "config; NOT addressable from MCP sessions — pick them in the "
+            "ZCode desktop model picker, or add them as custom providers):"
+        )
+        for pid, info in desktop_only:
+            models = ", ".join(info.get("models") or []) or "(no models)"
+            state = "enabled" if info.get("enabled") else "disabled"
+            lines.append(f"- {info.get('name') or pid} ({pid}, {state}): {models}")
     lines.append("")
     lines.append(
-        "selector: providerId/modelId or providerId/modelId$reasoningLevel "
-        "(a bare modelId works only when unique across all providers)"
+        "selector: providerId/modelId or Name/modelId (e.g. CPA/gpt-5.6-luna, "
+        "DeepSeek/deepseek-v4-pro) or ...$reasoningLevel; a bare modelId works "
+        "only when unique across all providers"
     )
     return chr(10).join(lines)
 
@@ -435,7 +467,9 @@ def tool_zcode_session_set_model(args: dict) -> str:
     except RuntimeError as e:
         return f"error: {e}"
     try:
-        selection = parse_model_selector(args["model"], available)
+        selection = parse_model_selector(
+            args["model"], available, _aliases_for(available)
+        )
     except ValueError as e:
         return f"error: {e}"
     try:
@@ -791,9 +825,11 @@ TOOLS = [
     {
         "name": "zcode_models",
         "description": (
-            "Standalone: list ALL models across ALL providers configured in ZCode "
-            "(built-in, Coding Plan / Start Plan, custom) with reasoning levels, "
-            "context windows and input capabilities. No conversation required."
+            "Standalone: list ALL session-addressable models across ALL providers "
+            "configured in ZCode (custom API providers, coding-plan channels) with "
+            "reasoning levels, context windows and input capabilities, plus the "
+            "desktop-managed account sources that sessions cannot address. No "
+            "conversation required."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -802,7 +838,7 @@ TOOLS = [
         "description": (
             "Switch the model of an existing conversation (takes effect from the "
             "next message). Selector: modelId | providerId/modelId | "
-            "providerId/modelId$reasoningLevel."
+            "ProviderName/modelId (e.g. CPA/gpt-5.6-luna) | ...$reasoningLevel."
         ),
         "inputSchema": {
             "type": "object",

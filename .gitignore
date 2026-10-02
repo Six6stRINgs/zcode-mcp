@@ -19,3 +19,4 @@ sandbox/*
 # protocol reference clone (local only)
 ref/
 
+uv.lock

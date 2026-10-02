@@ -30,6 +30,11 @@ TASKS_INDEX_PATH = os.environ.get(
 ZCODE_V2_CONFIG = os.environ.get(
     "ZCODE_MCP_ZCODE_CONFIG", os.path.join(ZCODE_HOME, "v2", "config.json")
 )
+# app-server layer provider registry (the ONLY source of session-addressable
+# provider ids; config.json's provider map is the desktop/account layer)
+PROVIDER_CONFIG_PATH = os.environ.get(
+    "ZCODE_MCP_PROVIDER_CONFIG", os.path.join(ZCODE_HOME, "v2", "provider_config.json")
+)
 APP_VERSION = os.environ.get("ZCODE_MCP_APP_VERSION", "3.14.4")
 CREDENTIALS_PATH = os.environ.get(
     "ZCODE_MCP_CREDENTIALS", os.path.join(ZCODE_HOME, "v2", "credentials.json")

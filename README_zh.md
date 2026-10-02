@@ -29,8 +29,8 @@ zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server（桥拉
   思考还是卡住。
 - **交互式权限** — 非 yolo 模式可用：ZCode 请求审批时，编排方 agent 查看待
   决请求、做出决策，turn 恢复。
-- **模型选择与额度** — 对话级指定任意模型（内置 / GLM Coding Plan /
-  Start Plan / 自定义供应商），可中途切换；一次调用查看全部套餐额度窗口。
+- **模型选择与额度** — 对话级按名称（`CPA/gpt-5.6-luna`）或 id 指定任意
+  可寻址模型，可中途切换；一次调用查看全部套餐额度窗口。
 - **生命周期管理** — 项目级对话、一次性对话、归档/恢复、带预演保护的彻底删除。
 - **原生附件** — 文件/图片走 ZCode 自己的附件管线，与桌面端拖拽同款。
 - **桌面互通** — 会话存于共享存储，桌面端可列出、可续聊这里创建的一切。
@@ -98,7 +98,7 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 
 | 工具             | 作用                                                                                                      |
 | ---------------- | --------------------------------------------------------------------------------------------------------- |
-| `zcode_models` | 所有已配置 provider 的全部模型（内置 / Coding Plan / Start Plan / 自定义），含 reasoning 档位与上下文窗口 |
+| `zcode_models` | 全部会话可寻址模型，带 provider 显示名（`CPA/gpt-5.6-luna`）、reasoning 档位与上下文窗口；同时单列桌面账号型来源 |
 | `zcode_quota`  | 一次调用返回全部套餐额度：GLM Coding Plan 窗口 + Start Plan token 余额                                    |
 | `zcode_health` | 桥 / Node.js / ZCode CLI / app-server 健康检查（不建会话）                                                |
 
@@ -130,7 +130,7 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 | `text`             | string   | **必填**                 | 要发送的首条消息。                                                                                                            |
 | `project`          | string   | —                             | 已存在项目目录的绝对路径；对话变为项目级，修改直接落到该仓库。优先于`cwd`。                                                 |
 | `cwd`              | string   | `$ZCODE_MCP_WORKSPACE`       | 工作区目录（给了`project` 时被忽略）。                                                                                      |
-| `model`            | string   | `bigmodel-api/GLM-5.3-Flash` | 选择器：`providerId/modelId`，可追加 `$reasoningLevel`。未给档位时优先 `high`。见 `zcode_models`。                    |
+| `model`            | string   | `bigmodel-api/GLM-5.3-Flash` | 选择器：`providerId/modelId`、`ProviderName/modelId`（如 `CPA/gpt-5.6-luna`），可追加 `$reasoningLevel`。未给档位时优先 `high`。见 `zcode_models`。                    |
 | `mode`             | enum     | `yolo`                       | `plan` / `build` / `edit` / `yolo` / `auto`。非 yolo 模式会因审批暂停。                                             |
 | `temporary`        | boolean  | `false`                      | 一次性对话；用完配`zcode_session_discard`。                                                                                 |
 | `files`            | string[] | —                             | 附件绝对路径。                                                                                                                |
@@ -204,7 +204,7 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 | 参数           | 类型   | 默认值         | 说明                                                              |
 | -------------- | ------ | -------------- | ----------------------------------------------------------------- |
 | `session_id` | string | **必填** | 目标对话。                                                        |
-| `model`      | string | **必填** | `providerId/modelId` 或 `providerId/modelId$reasoningLevel`。 |
+| `model`      | string | **必填** | `providerId/modelId`、`ProviderName/modelId`，或二者加 `$reasoningLevel`。 |
 
 #### `zcode_session_permissions`
 
@@ -240,6 +240,13 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 
 无参数。
 
+关于模型身份：会话按 app-server 注册表（`~/.zcode/v2/provider_config.json`）
+寻址 provider——自定义 API provider 用配置里的 id（通常是 UUID），BigModel
+族的所有通道折叠为一个 `bigmodel-api` provider（显示名即该条目的名字，例如
+"BigModel Coding Plan"）。桌面账号型来源（BigModel 个人 / Start Plan / Z.ai，
+即靠桌面登录支撑的选择器分区）**不能**被会话直接寻址；`zcode_models` 会把
+它们单独列出，按名称选择时返回指路说明而不是静默失败。
+
 ## 配置（环境变量）
 
 | 变量                        | 默认值                                | 说明                                                                                                              |
@@ -255,6 +262,7 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 | `ZCODE_MCP_TASKS_INDEX`   | `$ZCODE_HOME/v2/tasks-index.sqlite` | 覆盖任务索引路径。                                                                                                |
 | `ZCODE_MCP_CREDENTIALS`   | `$ZCODE_HOME/v2/credentials.json`   | 覆盖 OAuth 凭据存储路径（额度）。                                                                                 |
 | `ZCODE_MCP_ZCODE_CONFIG`  | `$ZCODE_HOME/v2/config.json`        | 覆盖 provider 配置路径（Start Plan 余额）。                                                                       |
+| `ZCODE_MCP_PROVIDER_CONFIG` | `$ZCODE_HOME/v2/provider_config.json` | 覆盖 app-server provider 注册表路径（模型显示名与桌面专属来源）。                                                 |
 | `ZCODE_MCP_APP_VERSION`   | `3.14.4`                            | 套餐额度端点携带的`app_version`。                                                                               |
 
 ## 工作原理

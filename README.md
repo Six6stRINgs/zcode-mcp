@@ -31,8 +31,8 @@ Pure Python standard library — the only optional dependency is
 - **Interactive permissions** — non-yolo modes work: when ZCode asks for
   approval, the orchestrating agent sees the request, decides, and the turn
   resumes.
-- **Model selection & quota** — choose any model per conversation (built-in,
-  GLM Coding Plan, Start Plan, custom providers), switch mid-flight, and
+- **Model selection & quota** — choose any session-addressable model per
+  conversation by name (`CPA/gpt-5.6-luna`) or id, switch mid-flight, and
   check all plan quota windows in one call.
 - **Lifecycle control** — project-scoped and throwaway conversations,
   archive/unarchive, and permanent delete with a dry-run guard.
@@ -111,7 +111,7 @@ Two families, by design:
 
 | Tool             | Purpose                                                                                                                              |
 | ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
-| `zcode_models` | Every model across every configured provider (built-in, Coding Plan / Start Plan, custom), with reasoning levels and context windows |
+| `zcode_models` | Every session-addressable model with provider display names (`CPA/gpt-5.6-luna`), reasoning levels and context windows; also lists the desktop-managed account sources sessions cannot address |
 | `zcode_quota`  | All plan quotas in one call: GLM Coding Plan windows and Start Plan token balances                                                   |
 | `zcode_health` | Bridge, Node.js, ZCode CLI and app-server health check                                                                               |
 
@@ -143,7 +143,7 @@ Two families, by design:
 | `text`             | string   | **required**             | First message to send.                                                                                                                           |
 | `project`          | string   | —                             | Absolute path to an existing project directory; the conversation becomes project-scoped and edits land in that repo. Overrides`cwd`.           |
 | `cwd`              | string   | `$ZCODE_MCP_WORKSPACE`       | Workspace directory (ignored when`project` is given).                                                                                          |
-| `model`            | string   | `bigmodel-api/GLM-5.3-Flash` | Selector:`providerId/modelId`, optionally `$reasoningLevel`. `high` is the preferred level when none is given. See `zcode_models`.       |
+| `model`            | string   | `bigmodel-api/GLM-5.3-Flash` | Selector: `providerId/modelId`, `ProviderName/modelId` (e.g. `CPA/gpt-5.6-luna`), optionally `$reasoningLevel`. `high` is the preferred level when none is given. See `zcode_models`.       |
 | `mode`             | enum     | `yolo`                       | `plan` / `build` / `edit` / `yolo` / `auto`. Non-yolo modes pause for approvals.                                                       |
 | `temporary`        | boolean  | `false`                      | Throwaway conversation; pair with`zcode_session_discard`.                                                                                      |
 | `files`            | string[] | —                             | Absolute paths of files to attach.                                                                                                               |
@@ -217,7 +217,7 @@ Returns `current_model`, `persisted_status` (desktop store; may lag),
 | Parameter      | Type   | Default            | Description                                                      |
 | -------------- | ------ | ------------------ | ---------------------------------------------------------------- |
 | `session_id` | string | **required** | Target conversation.                                             |
-| `model`      | string | **required** | `providerId/modelId` or `providerId/modelId$reasoningLevel`. |
+| `model`      | string | **required** | `providerId/modelId`, `ProviderName/modelId`, or either + `$reasoningLevel`. |
 
 #### `zcode_session_permissions`
 
@@ -253,6 +253,15 @@ Returns `current_model`, `persisted_status` (desktop store; may lag),
 
 No parameters.
 
+About model identity: sessions address providers the way ZCode's app-server
+registry does (`~/.zcode/v2/provider_config.json`) — custom API providers keep
+their config id (often a UUID), and all BigModel-family channels collapse into
+one `bigmodel-api` provider whose display name is whatever that entry is called
+(e.g. "BigModel Coding Plan"). Desktop account sources (BigModel 个人 / Start
+Plan / Z.ai, the picker sections backed by a desktop login) are **not**
+session-addressable; `zcode_models` lists them separately, and selecting one
+by name returns guidance instead of a silent failure.
+
 ## Configuration (environment variables)
 
 | Variable                    | Default                               | Purpose                                                                                                                                                  |
@@ -268,6 +277,7 @@ No parameters.
 | `ZCODE_MCP_TASKS_INDEX`   | `$ZCODE_HOME/v2/tasks-index.sqlite` | Override desktop task-index path.                                                                                                                        |
 | `ZCODE_MCP_CREDENTIALS`   | `$ZCODE_HOME/v2/credentials.json`   | Override OAuth credential store path (quota).                                                                                                            |
 | `ZCODE_MCP_ZCODE_CONFIG`  | `$ZCODE_HOME/v2/config.json`        | Override provider config path (Start Plan balance).                                                                                                      |
+| `ZCODE_MCP_PROVIDER_CONFIG` | `$ZCODE_HOME/v2/provider_config.json` | Override app-server provider registry path (model names & desktop-managed sources).                                                                      |
 | `ZCODE_MCP_APP_VERSION`   | `3.14.4`                            | `app_version` sent to plan-quota endpoints.                                                                                                            |
 
 ## How it works

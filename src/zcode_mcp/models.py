@@ -24,7 +24,13 @@ import time
 import urllib.error
 import urllib.request
 
-from .config import APP_VERSION, CREDENTIALS_PATH, ZCODE_V2_CONFIG, log
+from .config import (
+    APP_VERSION,
+    CREDENTIALS_PATH,
+    PROVIDER_CONFIG_PATH,
+    ZCODE_V2_CONFIG,
+    log,
+)
 
 REASONING_SEPARATOR = "$"
 QUOTA_URL = "https://api.z.ai/api/monitor/usage/quota/limit"
@@ -61,12 +67,148 @@ def _norm_session_models(snapshot: dict) -> tuple[dict | None, list[dict]]:
     return current, available
 
 
-def parse_model_selector(selector: str, available: list[dict]) -> dict:
+def provider_registry() -> dict[str, dict]:
+    """Merged provider registry from both ZCode config layers.
+
+    provider_config.json is the app-server layer — its provider ids are the
+    ONLY ones sessions can address. config.json's ``provider`` map is the
+    desktop/account layer (builtin:*, OAuth sources) whose entries exist but
+    are not session-addressable. Returns ``{id: {name, origin, enabled,
+    models}}``; both files are optional (empty registry when missing).
+    """
+    reg: dict[str, dict] = {}
+    try:
+        with open(PROVIDER_CONFIG_PATH, encoding="utf-8") as f:
+            d = json.load(f)
+        for r in ((d.get("config") or {}).get("providerConfigRules") or {}).get(
+            "providerRules"
+        ) or []:
+            pid = r.get("providerId")
+            if not pid:
+                continue
+            reg[pid] = {
+                "name": r.get("providerName") or pid,
+                "origin": "provider_config",
+                "enabled": True,
+                "models": list((r.get("config") or {}).get("personalModelIds") or []),
+            }
+    except (OSError, ValueError):
+        pass
+    try:
+        with open(ZCODE_V2_CONFIG, encoding="utf-8") as f:
+            cfg = json.load(f)
+        for pid, p in (cfg.get("provider") or {}).items():
+            if pid in reg:
+                continue
+            reg[pid] = {
+                "name": p.get("name") or pid,
+                "origin": "config",
+                "enabled": bool(p.get("enabled", True)),
+                "models": list((p.get("models") or {}).keys()),
+            }
+    except (OSError, ValueError):
+        pass
+    return reg
+
+
+def _norm_key(s: str) -> str:
+    return "".join(ch for ch in (s or "").lower() if ch.isalnum())
+
+
+def build_provider_aliases(
+    available: list[dict], registry: dict[str, dict] | None = None
+) -> dict[str, list[str]]:
+    """Normalized-name → provider-id candidates for name-based selectors.
+
+    Aliases cover raw ids, ``builtin:`` suffixes, per-model providerLabel
+    values and registry display names. Names shared by several providers
+    resolve to multiple candidates and are reported as ambiguous on use.
+    """
+    reg = registry if registry is not None else provider_registry()
+    aliases: dict[str, set[str]] = {}
+
+    def add(alias: str, pid: str | None) -> None:
+        if not alias or not pid:
+            return
+        aliases.setdefault(_norm_key(alias), set()).add(pid)
+
+    for m in available:
+        pid = m.get("provider_id")
+        if not pid:
+            continue
+        add(pid, pid)
+        if pid.startswith("builtin:"):
+            add(pid.split(":", 1)[1], pid)
+        add(m.get("provider_label"), pid)
+    for pid, info in reg.items():
+        add(pid, pid)
+        # ``builtin:bigmodel-start-plan`` also answers to ``bigmodel-start-plan``
+        # and ``start-plan`` — the desktop picker's own section labels for the
+        # account source, which no config file carries verbatim
+        if pid.startswith("builtin:"):
+            rest = pid.split(":", 1)[1]
+            add(rest, pid)
+            parts = rest.split("-")
+            for i in range(1, len(parts) - 1):
+                add("-".join(parts[i:]), pid)
+        add(info.get("name"), pid)
+    return {k: sorted(v) for k, v in aliases.items()}
+
+
+def _resolve_provider(
+    provider_id: str, available: list[dict], aliases: dict[str, list[str]] | None
+) -> str:
+    """Map a selector's provider part to a canonical providerId.
+
+    Exact (then case-insensitive) ids pass through untouched; names resolve
+    via ``aliases``. Raises when a name is unknown or ambiguous, and points
+    at the desktop picker for registry providers the session layer can't
+    address.
+    """
+    ids = {m.get("provider_id") for m in available if m.get("provider_id")}
+    if not provider_id or provider_id in ids:
+        return provider_id
+    lowered = {p.lower(): p for p in ids}
+    hit = lowered.get(provider_id.lower())
+    if hit:
+        return hit
+    if not aliases:
+        return provider_id  # legacy passthrough: let the app-server validate
+    candidates = aliases.get(_norm_key(provider_id)) or []
+    if len(candidates) > 1:
+        # a registry name shared by several providers resolves to the one
+        # sessions can actually address; ambiguity only among addressable ids
+        addressable = [c for c in candidates if c in ids]
+        if len(addressable) == 1:
+            candidates = addressable
+    if len(candidates) == 1:
+        pid = candidates[0]
+        if pid not in ids:
+            raise ValueError(
+                f"provider '{provider_id}' ({pid}) exists in ZCode but is not "
+                "addressable from MCP sessions (desktop-managed account source); "
+                "switch it in the ZCode desktop model picker, or add it as a "
+                "custom provider to make it session-addressable"
+            )
+        return pid
+    if len(candidates) > 1:
+        raise ValueError(
+            f"ambiguous provider '{provider_id}' matches: {', '.join(sorted(candidates))}"
+        )
+    raise ValueError(
+        f"unknown provider '{provider_id}'; known providers: " + ", ".join(sorted(ids))
+    )
+
+
+def parse_model_selector(selector: str, available: list[dict], aliases: dict[str, list[str]] | None = None) -> dict:
     """Parse ``modelId`` / ``providerId/modelId`` / ``providerId/modelId$level``.
 
-    A bare modelId resolves against ``available`` when exactly one entry
-    matches (case-insensitive); ambiguity and no-match raise ValueError with
-    the matching candidates listed. When the matched entry has a default
+    The provider part may be a raw providerId (UUID or ``bigmodel-api``) or a
+    display name such as ``CPA`` / ``DeepSeek`` / ``BigModel Coding Plan``
+    (matched case- and punctuation-insensitively via ``aliases``). A bare
+    modelId resolves against ``available`` when exactly one entry matches
+    (case-insensitive); ambiguity and no-match raise ValueError with the
+    matching candidates listed. When the matched entry has a default
     reasoning level and none was given, the default is applied (some models
     reject creation without one).
     """
@@ -79,7 +221,11 @@ def parse_model_selector(selector: str, available: list[dict]) -> dict:
         level = level.strip() or None
     if "/" in selector:
         provider_id, model_id = selector.split("/", 1)
-        selection = _selection(provider_id.strip(), model_id.strip(), level)
+        selection = _selection(
+            _resolve_provider(provider_id.strip(), available, aliases),
+            model_id.strip(),
+            level,
+        )
     else:
         # bare modelId: resolve against available
         matches = [
