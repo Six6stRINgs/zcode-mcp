@@ -6,7 +6,7 @@ Talk to [ZCode](https://zcode.z.ai) — Z.AI's agentic coding app — from any
 MCP client (Codex CLI, Claude Code, Cursor, your own agents).
 
 zcode-mcp opens ZCode conversations, keeps them going across turns, and lets
-you watch the model work in real time. It speaks to ZCode through its official
+you check on the model's partial output as it is generated. It speaks to ZCode through its official
 **app-server protocol** — the same channel the desktop app uses — so every
 conversation you create here is a real one: visible in the desktop app,
 resumable there, and editing real files in your projects.
@@ -25,9 +25,9 @@ Pure Python standard library — the only optional dependency is
 
 - **Multi-turn conversations** — hold a session id, send follow-ups, correct
   course mid-task.
-- **Mid-turn observability** — poll status and read the model's output while
-  it streams; wait timeouts tell you whether the turn is streaming, thinking,
-  or stalled, with the output so far.
+- **Mid-turn observability** — while a turn runs, poll status and read what
+  the model has written so far (accumulated live by the bridge); wait
+  timeouts classify the turn as streaming, thinking, or stalled.
 - **Interactive permissions** — non-yolo modes work: when ZCode asks for
   approval, the orchestrating agent sees the request, decides, and the turn
   resumes.
@@ -73,7 +73,8 @@ codex mcp add zcode-mcp --env ZCODE_CJS="D:/Tools/ZCode/resources/glm/zcode.cjs"
 ```
 
 On Windows you can also add the directory that contains `zcode.cjs`
-(`…esources\glm`) to the **system environment variable** `ZCODE_CJS`
+(`…
+esources\glm`) to the **system environment variable** `ZCODE_CJS`
 (Settings → System → About → Advanced system settings → Environment
 Variables) instead of per-server config — the bridge reads it either way.
 
@@ -104,7 +105,7 @@ Two families, by design:
 | `zcode_session_new` | New conversation + first message; blocks for the reply unless `wait: false` |
 | `zcode_session_send` | Follow-up message (text and/or attachments) |
 | `zcode_session_status` | Live state: model in use, turn state, pending interactions, events |
-| `zcode_session_output` | The model's streaming output right now, or the last reply |
+| `zcode_session_output` | What the model has written so far in the running turn (poll-based), or the last reply |
 | `zcode_session_result` | Compact machine-readable result: status, reply, error, model |
 | `zcode_session_diff` | Git status / changed files / bounded diff for the worker's workspace |
 | `zcode_session_read` | Recent message history (idle conversations only) |
@@ -242,13 +243,14 @@ No parameters.
 ```
 1. zcode_session_new {text, project: "…", wait: false}   → session_id at once
 2. zcode_session_status {session_id}                     → turn running? events?
-3. zcode_session_output {session_id}                     → model's text so far
+3. zcode_session_output {session_id}                     → model's text so far (poll)
 4. zcode_session_wait {session_id}                       → final reply
 ```
 
 On a wait timeout the note classifies the live turn as `streaming`,
 `producing` (thinking / running tools) or `stalled`, and includes the output
-so far — so you always know whether to keep waiting or to stop and retry.
+so far. Note that observation is poll-based: the bridge accumulates the
+model's deltas live, but you see them when you call — there is no push.
 
 ### Model selection & quota
 

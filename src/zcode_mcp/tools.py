@@ -674,10 +674,9 @@ TOOLS = [
     {
         "name": "zcode_session_output",
         "description": (
-            "Observability: the model's CURRENT streaming output for a session "
-            "(text produced so far in the running turn), or the last completed "
-            "response. Lets other agents see intermediate reasoning/answers "
-            "instead of waiting blindly."
+            "Observability: what the model has written so far in the running turn "
+            "(accumulated from stream deltas — poll to refresh), or the last "
+            "completed response."
         ),
         "inputSchema": {
             "type": "object",

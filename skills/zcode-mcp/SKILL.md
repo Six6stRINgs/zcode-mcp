@@ -107,7 +107,7 @@ contents into `text`.
 
 ```
 zcode_session_status {session_id}   → turn_state, event ages — cheap, any time
-zcode_session_output {session_id}   → the model's text so far (streaming)
+zcode_session_output {session_id}   → the model's text so far (poll to refresh)
 zcode_session_result {session_id}   → structured terminal result for orchestration
 ```
 
