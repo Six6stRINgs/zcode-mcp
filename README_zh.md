@@ -85,7 +85,7 @@ MCP server。
 | `zcode_session_stop` | 中断运行中的 turn |
 | `zcode_models` | **所有** provider 的**所有**模型（内置 + Coding Plan / Start Plan + 自定义）含 reasoning 档位，及会话当前选择——不受 set_model 收窄影响 |
 | `zcode_session_set_model` | 切换对话模型（对下一条消息生效） |
-| `zcode_quota` | GLM Coding Plan / Start Plan 额度：分窗口用量、余量、下次重置 |
+| `zcode_quota` | 全部套餐额度：GLM Coding Plan 窗口 + Start Plan token 余额（如 ZCode Trust Build） |
 | `zcode_session_list` | 列出所有工作区的对话；归档的默认隐藏，`include_archived: true` 可见 |
 | `zcode_session_archive` | 归档对话（列表隐藏，不删除任何内容）；`unarchive: true` 恢复 |
 | `zcode_session_discard` | **永久删除**对话（会话 + 全部历史）；不带 `confirm: true` 时仅预演并报告行数 |
@@ -220,9 +220,10 @@ MCP server。
 
 #### `zcode_quota`
 
-无参数。用本地 ZCode OAuth 凭据（进程内解密，绝不落日志）读取 GLM
-Coding Plan / Start Plan 的限额端点。需要可选依赖：
-`pip install "zcode-mcp[quota]"`。
+无参数。一次调用读取：GLM Coding Plan 窗口（用量/余量/重置时间）和
+Start Plan token 余额（按模型的额度桶，如 ZCode Trust Build，含过期
+时间），凭据来自本地 ZCode 配置（进程内解密，绝不落日志；请求携带
+与桌面端一致的身份头）。需要可选依赖：`pip install "zcode-mcp[quota]"`。
 
 ### 观测模式（A2A 编排的核心用法）
 

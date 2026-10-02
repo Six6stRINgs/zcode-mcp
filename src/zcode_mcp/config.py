@@ -27,6 +27,10 @@ SESSION_DB_PATH = os.environ.get(
 TASKS_INDEX_PATH = os.environ.get(
     "ZCODE_MCP_TASKS_INDEX", os.path.join(ZCODE_HOME, "v2", "tasks-index.sqlite")
 )
+ZCODE_V2_CONFIG = os.environ.get(
+    "ZCODE_MCP_ZCODE_CONFIG", os.path.join(ZCODE_HOME, "v2", "config.json")
+)
+APP_VERSION = os.environ.get("ZCODE_MCP_APP_VERSION", "3.14.4")
 CREDENTIALS_PATH = os.environ.get(
     "ZCODE_MCP_CREDENTIALS", os.path.join(ZCODE_HOME, "v2", "credentials.json")
 )

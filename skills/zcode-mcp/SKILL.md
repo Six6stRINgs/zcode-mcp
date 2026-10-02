@@ -41,7 +41,7 @@ Two things to internalize before calling anything:
 | `zcode_session_stop` | Interrupt the running turn |
 | `zcode_models` | Standalone: FULL model catalogue across all providers |
 | `zcode_session_set_model` | Switch a conversation's model mid-flight |
-| `zcode_quota` | GLM Coding Plan / Start Plan quota windows |
+| `zcode_quota` | All plan quotas: Coding Plan windows + Start Plan token balances |
 | `zcode_session_permissions` | Pending permission/user-input requests pausing a non-yolo turn |
 | `zcode_session_decide` | Answer a pending request (allow/deny) — turn resumes |
 | `zcode_session_list` | Conversations across workspaces (`include_archived` to see archived) |

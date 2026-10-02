@@ -31,7 +31,8 @@ from .protocol import (
     subscribe,
     wait_turn,
 )
-from .models import _norm_session_models, fetch_quota, parse_model_selector
+from .models import (_norm_session_models, fetch_quota,
+                     fetch_start_plan_balances, parse_model_selector)
 from .store import (
     archived_session_ids,
     discard_scope,
@@ -466,17 +467,37 @@ def tool_zcode_session_set_model(args: dict) -> str:
 
 
 def tool_zcode_quota(args: dict) -> str:
+    """All plan quotas: Coding Plan windows + Start Plan token balances."""
+    lines = []
     try:
         q = fetch_quota()
+        lines.append(f"Coding Plan ({q['level']}):")
+        for l in q["limits"]:
+            reset = f"  next reset: {l['next_reset']}" if l.get("next_reset") else ""
+            lines.append(
+                f"- {l['window']}: used {l['used']} / limit {l['limit']} "
+                f"(remaining {l['remaining']}, {l['percentage']}%){reset}"
+            )
     except RuntimeError as e:
-        return f"error: {e}"
-    lines = [f"plan level: {q['level']}"]
-    for l in q["limits"]:
-        reset = f"  next reset: {l['next_reset']}" if l.get("next_reset") else ""
-        lines.append(
-            f"- {l['window']}: used {l['used']} / limit {l['limit']} "
-            f"(remaining {l['remaining']}, {l['percentage']}%){reset}"
-        )
+        lines.append(f"Coding Plan: unavailable ({e})")
+    try:
+        sp = fetch_start_plan_balances()
+    except Exception as e:
+        sp = [{"provider": "?", "error": str(e)}]
+    for entry in sp or []:
+        name = entry.get("plan") or entry.get("provider")
+        if entry.get("error"):
+            lines.append(f"Start Plan ({name}): unavailable ({entry['error']})")
+            continue
+        lines.append(f"Start Plan ({name}, status: {entry.get('status')}):")
+        for b in entry.get("balances") or []:
+            lines.append(
+                f"- {b.get('model')}: used {b.get('used')} / total {b.get('total')} "
+                f"(remaining {b.get('remaining')}, {b.get('percentage')}%)"
+                + (f"  expires: {b.get('expires')}" if b.get("expires") else "")
+            )
+    if not lines:
+        return "no plan quota information available"
     return chr(10).join(lines)
 
 

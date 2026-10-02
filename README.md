@@ -98,7 +98,7 @@ Optional `pip install -e .` gives you a `zcode-mcp` console entry point.
 | `zcode_session_stop` | Interrupt the running turn |
 | `zcode_models` | **All** models across **all** providers (built-in + Coding Plan / Start Plan + custom) with reasoning levels, and the session's current selection — unaffected by set_model narrowing |
 | `zcode_session_set_model` | Switch a conversation's model (takes effect from the next message) |
-| `zcode_quota` | GLM Coding Plan / Start Plan quota: per-window usage, remaining, next reset |
+| `zcode_quota` | All plan quotas: GLM Coding Plan windows + Start Plan token balances (e.g. ZCode Trust Build) |
 | `zcode_session_list` | All conversations across workspaces; archived ones hidden unless `include_archived: true` |
 | `zcode_session_archive` | Archive a conversation (hidden from lists, nothing deleted); `unarchive: true` restores it |
 | `zcode_session_discard` | **Permanently delete** a conversation (session + full history); dry-run row counts unless `confirm: true` |
@@ -235,9 +235,12 @@ health without creating a conversation.
 
 #### `zcode_quota`
 
-No parameters. Reads the GLM Coding Plan / Start Plan limit endpoint with
-the local ZCode OAuth credentials (decrypted in-process, never logged).
-Requires the optional `cryptography` package: `pip install "zcode-mcp[quota]"`.
+No parameters. Reads, in one call: GLM Coding Plan windows (usage,
+remaining, next reset) and Start Plan token balances (per-model buckets
+like ZCode Trust Build, with expiry) via the local ZCode credentials
+(decrypted in-process, never logged; the request carries the same
+identity headers as the desktop app). Requires the optional
+`cryptography` package: `pip install "zcode-mcp[quota]"`.
 
 ### Observability pattern
 

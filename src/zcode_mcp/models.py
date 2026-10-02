@@ -18,10 +18,13 @@ import base64
 import hashlib
 import json
 import os
+import platform
+import sys
+import time
 import urllib.error
 import urllib.request
 
-from .config import CREDENTIALS_PATH, log
+from .config import APP_VERSION, CREDENTIALS_PATH, ZCODE_V2_CONFIG, log
 
 REASONING_SEPARATOR = "$"
 QUOTA_URL = "https://api.z.ai/api/monitor/usage/quota/limit"
@@ -217,3 +220,115 @@ def fetch_quota() -> dict:
     limits = [_humanize_limit(l) for l in data.get("limits") or []]
     log("quota fetched ok")
     return {"level": data.get("level"), "limits": limits}
+
+
+# ---------------------------------------------------------------------------
+# Start Plan balance (ZCode Trust Build style daily token buckets)
+
+
+def _desktop_headers(token: str) -> dict:
+    """The exact header set the ZCode desktop sends; the gateway rejects
+    requests missing X-Device-Mid with a generic 'parameter error'."""
+    import locale
+    mid = None
+    try:
+        mid = json.load(open(CREDENTIALS_PATH.replace(
+            "credentials.json", "telemetry-state.json"), encoding="utf-8"
+        )).get("deviceMid")
+    except Exception:
+        pass
+    headers = {
+        "User-Agent": f"ZCode/{APP_VERSION}",
+        "HTTP-Referer": "https://zcode.z.ai",
+        "X-Title": "Z Code@electron",
+        "X-ZCode-App-Version": APP_VERSION,
+        "X-Platform": f"{sys.platform}-x64" if sys.platform == "win32" else sys.platform,
+        "X-Client-Language": (locale.getdefaultlocale()[0] or "unknown"),
+        "X-Client-Timezone": "Asia/Hong_Kong",
+        "X-Os-Category": {"win32": "windows", "darwin": "macos"}.get(sys.platform, "linux"),
+        "X-Os-Version": platform.version(),
+        "Authorization": f"Bearer {token}",
+        "Accept": "application/json",
+    }
+    if mid:
+        headers["X-Device-Mid"] = mid
+    return headers
+
+
+def _start_plan_providers() -> list[dict]:
+    """Start-Plan-like providers from the ZCode provider config (id, jwt, base)."""
+    try:
+        with open(ZCODE_V2_CONFIG, encoding="utf-8") as fh:
+            cfg = json.load(fh)
+    except OSError:
+        return []
+    out = []
+    for pid, prov in (cfg.get("provider") or {}).items():
+        if "start-plan" not in pid:
+            continue
+        options = prov.get("options") or {}
+        token = options.get("apiKey")
+        base = options.get("baseURL")
+        if token and base:
+            out.append({"id": pid, "token": token, "base": base.replace("/anthropic", "")})
+    return out
+
+
+def fetch_start_plan_balances() -> list[dict]:
+    """Per-plan token balance buckets from /zcode-plan/billing/balance.
+
+    Returns a list of {provider, plans, balances}; empty when no Start Plan
+    provider is configured. The JWT is sent in-process, never logged.
+    """
+    providers = _start_plan_providers()
+    results = []
+    for prov in providers:
+        url = f"{prov['base']}/billing/balance?app_version={APP_VERSION}"
+        req = urllib.request.Request(url, headers=_desktop_headers(prov["token"]))
+        try:
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                payload = json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            body = e.read().decode(errors="replace")[:150]
+            results.append({"provider": prov["id"], "error": f"HTTP {e.code}: {body}"})
+            continue
+        if payload.get("code") != 0:
+            results.append({"provider": prov["id"], "error": payload.get("msg") or "unknown"})
+            continue
+        data = payload.get("data") or {}
+        plan_names = {
+            p.get("plan_id"): p
+            for p in data.get("plans") or []
+        }
+        balances = []
+        for b in data.get("balances") or []:
+            plan = plan_names.get(b.get("plan_id")) or {}
+            total = b.get("total_units")
+            used = b.get("used_units")
+            remaining = b.get("remaining_units")
+            expires = b.get("expires_at")
+            entry = {
+                "model": b.get("show_name"),
+                "used": used,
+                "total": total,
+                "remaining": remaining,
+                "percentage": (
+                    round(used / total * 100, 1) if isinstance(total, (int, float)) and total else None
+                ),
+            }
+            if expires:
+                entry["expires"] = time.strftime(
+                    "%Y-%m-%d %H:%M", time.localtime(expires)
+                )
+            balances.append(entry)
+        results.append(
+            {
+                "provider": prov["id"],
+                "plan": plan_names.get(
+                    next(iter(plan_names)), {}
+                ).get("name") or (data.get("plans") or [{}])[0].get("name"),
+                "status": ((data.get("plans") or [{}])[0].get("status")),
+                "balances": balances,
+            }
+        )
+    return results
