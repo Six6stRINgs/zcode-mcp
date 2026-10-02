@@ -9,4 +9,4 @@ read, wait, stop.
 See README.md for registration, tools and protocol caveats.
 """
 
-__version__ = "0.10.2"
+__version__ = "0.10.3"

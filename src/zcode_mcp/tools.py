@@ -23,7 +23,6 @@ from .protocol import (
     find_session,
     read_snapshot,
     run_turn,
-    send_message,
     session_list,
     set_model,
     snapshot_last_reply,
@@ -80,7 +79,7 @@ def tool_zcode_session_new(args: dict) -> str:
         if not os.path.isdir(project):
             return (
                 f"error: project directory does not exist: {project}\n"
-                "zcode_new(project=…) attaches the conversation to an EXISTING "
+                "zcode_session_new(project=…) attaches the conversation to an EXISTING "
                 "project; create it first or use cwd instead."
             )
         cwd = project
@@ -93,24 +92,10 @@ def tool_zcode_session_new(args: dict) -> str:
     except RuntimeError as e:
         if args.get("model"):
             return f"error: {e}"
+        log(f"model catalogue probe failed ({e}); using runtime default")
     selection = None
     selector = args.get("model") or DEFAULT_MODEL
     if selector:
-        if _available_from_cache() is None:
-            # resolve needs the catalogue; a cold bridge probes it with a
-            # throwaway deferred session (invisible, closed right after)
-            try:
-                probe = create_session(cwd=cwd, mode="yolo",
-                                       title_generation=False, persistence="deferred")
-            except Exception as e:
-                if args.get("model"):
-                    return f"error: cannot probe model list: {e}"
-                log(f"model catalogue probe failed ({e}); using runtime default")
-            else:
-                try:
-                    SERVER.request("session/close", {"sessionId": probe}, timeout=15)
-                except Exception:
-                    pass
         try:
             selection = parse_model_selector(selector, _available_from_cache() or [])
         except ValueError as e:
@@ -207,8 +192,8 @@ def tool_zcode_session_status(args: dict) -> str:
         "current_model": (
             f"{current_model.get('providerId')}/{current_model.get('modelId')}"
             + (
-                f"${current_model['options']['reasoningLevel']}"
-                if (current_model or {}).get("options", {}).get("reasoningLevel")
+                f"${(current_model.get('options') or {}).get('reasoningLevel')}"
+                if (current_model.get("options") or {}).get("reasoningLevel")
                 else ""
             )
             if current_model
@@ -410,7 +395,8 @@ def tool_zcode_session_decide(args: dict) -> str:
         return f"error: no pending interaction {rid}"
     return (
         f"request_id={rid}\ndecision={decision} sent. The turn continues; "
-        "collect the result with zcode_session_wait (or keep observing with zcode_status)."
+        "collect the result with zcode_session_wait (or keep observing with "
+        "zcode_session_status)."
     )
 
 
