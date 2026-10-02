@@ -192,9 +192,17 @@ def _resolve_provider(
             )
         return pid
     if len(candidates) > 1:
-        raise ValueError(
-            f"ambiguous provider '{provider_id}' matches: {', '.join(sorted(candidates))}"
+        msg = (
+            f"ambiguous provider '{provider_id}' matches: "
+            + ", ".join(sorted(candidates))
         )
+        if not any(c in ids for c in candidates):
+            msg += (
+                "; all of them are desktop-managed account sources not "
+                "addressable from MCP sessions — pick one in the ZCode "
+                "desktop model picker, or select it by its full id"
+            )
+        raise ValueError(msg)
     raise ValueError(
         f"unknown provider '{provider_id}'; known providers: " + ", ".join(sorted(ids))
     )

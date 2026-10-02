@@ -271,6 +271,18 @@ class ProviderAliasTest(unittest.TestCase):
         self.assertIn("not addressable", str(ctx.exception))
         self.assertIn("builtin:bigmodel-start-plan", str(ctx.exception))
 
+    def test_ambiguous_desktop_only_name_carries_guidance(self):
+        from zcode_mcp.models import build_provider_aliases, parse_model_selector
+
+        reg = dict(self.REGISTRY)
+        reg["builtin:zai-start-plan"] = {"name": "Z.ai - Coding Plan"}
+        aliases = build_provider_aliases(self.AVAILABLE, reg)
+        with self.assertRaises(ValueError) as ctx:
+            parse_model_selector("start-plan/GLM-5.3-Flash", self.AVAILABLE, aliases)
+        msg = str(ctx.exception)
+        self.assertIn("ambiguous", msg)
+        self.assertIn("desktop-managed account sources", msg)
+
     def test_raw_ids_still_work(self):
         self.assertEqual(self._sel("uuid-1/gpt-x")["providerId"], "uuid-1")
         self.assertEqual(self._sel("bigmodel-api/GLM-5.3")["providerId"], "bigmodel-api")
