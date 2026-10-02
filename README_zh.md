@@ -61,7 +61,7 @@ ZCode 装在别处，把 `ZCODE_CJS` 环境变量指向它——可以设为全�
 MCP 注册时指定：
 
 ```bash
-codex mcp add zcode-mcp --env ZCODE_CJS="D:/Tools/ZCode/resources/glm/zcode.cjs" -- uvx --from "<路径>/zcode-mcp" zcode-mcp
+codex mcp add zcode-mcp --env ZCODE_CJS="<安装目录>/resources/glm/zcode.cjs" -- uvx --from "<路径>/zcode-mcp" zcode-mcp
 ```
 
 Windows 下也可以在**系统环境变量**里新建 `ZCODE_CJS`，值为 `zcode.cjs`

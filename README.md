@@ -69,7 +69,7 @@ auto-detected from the common install locations (`%LOCALAPPDATA%/Programs/ZCode`
 the MCP registration:
 
 ```bash
-codex mcp add zcode-mcp --env ZCODE_CJS="D:/Tools/ZCode/resources/glm/zcode.cjs" -- uvx --from "<path-to>/zcode-mcp" zcode-mcp
+codex mcp add zcode-mcp --env ZCODE_CJS="<install-dir>/resources/glm/zcode.cjs" -- uvx --from "<path-to>/zcode-mcp" zcode-mcp
 ```
 
 On Windows you can also add the directory that contains `zcode.cjs`

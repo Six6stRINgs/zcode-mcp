@@ -133,6 +133,7 @@ Statuses you can see from a blocked/collected turn:
 
 ## Sub-skills
 
+- **`zcode-code-reviewer`** — read-only code review over a diff.
 - **`zcode-subagent`** — orchestrating ZCode as a subagent worker:
   dispatch patterns, verification loops, per-project workers, lifecycle
   hygiene. Read it before building multi-worker or A2A flows.
