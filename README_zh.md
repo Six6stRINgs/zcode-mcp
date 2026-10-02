@@ -75,6 +75,21 @@ Windows 下也可以在**系统环境变量**里新建 `ZCODE_CJS`，值为 `zco
 **其他 MCP 客户端**（Claude Code、Cursor 等）：把同一条命令注册为 stdio
 MCP server。
 
+## 技能（Skills）
+
+本仓库自带现成的技能文档（供 Codex 等读取 `SKILL.md` 文件的客户端使用）：
+`zcode-mcp`（总纲：工具、核心概念、选型指南）、`zcode-subagent`（把 ZCode
+当 subagent 工人编排）、`zcode-code-reviewer`（只读代码评审）。
+
+Codex 的安装方式是把技能文件夹复制进 Codex 的 skills 目录：
+
+```bash
+# macOS / Linux
+cp -r skills/* ~/.codex/skills/
+
+# Windows（PowerShell）
+Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
+
 ## 工具
 
 按设计分为两个家族：
@@ -293,3 +308,4 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 ## 许可证
 
 MIT
+```

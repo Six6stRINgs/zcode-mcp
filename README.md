@@ -85,6 +85,24 @@ interactive Codex simply asks once.
 **Other MCP clients** (Claude Code, Cursor, …): register the same command as
 a stdio MCP server.
 
+## Skills
+
+This repository ships ready-made skill documents (for Codex and other
+clients that read `SKILL.md` files): `zcode-mcp` (overview: tools, core
+concepts, decision guide), `zcode-subagent` (orchestrating ZCode as a
+subagent worker) and `zcode-code-reviewer` (read-only code review over a
+diff).
+
+To install them with Codex, copy the skill folders into the Codex skills
+directory:
+
+```bash
+# macOS / Linux
+cp -r skills/* ~/.codex/skills/
+
+# Windows (PowerShell)
+Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
+
 ## Tools
 
 Two families, by design:
@@ -234,24 +252,6 @@ Returns `current_model`, `persisted_status` (desktop store; may lag),
 #### `zcode_models` / `zcode_quota` / `zcode_health`
 
 No parameters.
-
-## Skills
-
-This repository ships ready-made skill documents (for Codex and other
-clients that read `SKILL.md` files): `zcode-mcp` (overview: tools, core
-concepts, decision guide), `zcode-subagent` (orchestrating ZCode as a
-subagent worker) and `zcode-code-reviewer` (read-only code review over a
-diff).
-
-To install them with Codex, copy the skill folders into the Codex skills
-directory:
-
-```bash
-# macOS / Linux
-cp -r skills/* ~/.codex/skills/
-
-# Windows (PowerShell)
-Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 
 ## Configuration (environment variables)
 
