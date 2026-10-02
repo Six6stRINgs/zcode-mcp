@@ -61,7 +61,7 @@ fire-and-observe gives you progress visibility in between.
 ```
 1. zcode_session_new {project: "…", text: "…", wait: false} → session_id at once
 2. zcode_session_status {session_id}     → is the turn running? event history
-3. zcode_session_output {session_id}     → the model's text so far (streaming)
+3. zcode_session_output {session_id}     → the model's text so far (poll to refresh)
 4. … do your own work; poll again later …
 5. zcode_session_wait {session_id}        → final reply
 6. zcode_session_result {session_id}     → structured terminal result
