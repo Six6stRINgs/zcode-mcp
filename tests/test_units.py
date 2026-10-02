@@ -305,5 +305,86 @@ class ProviderAliasTest(unittest.TestCase):
         self.assertEqual(sel["providerId"], "some-unknown")
 
 
+class EphemeralTest(unittest.TestCase):
+    """Temporary-conversation registry and reaper decisions."""
+
+    def setUp(self):
+        import importlib
+
+        self.eph = importlib.import_module("zcode_mcp.ephemeral")
+        with self.eph._lock:
+            self.eph._sessions.clear()
+
+    def tearDown(self):
+        with self.eph._lock:
+            self.eph._sessions.clear()
+
+    def test_register_touch_note(self):
+        self.eph.register("sess_t1")
+        self.assertTrue(self.eph.is_temporary("sess_t1"))
+        self.assertIn("temporary conversation", self.eph.note("sess_t1"))
+        self.eph.touch("sess_t1")
+        self.assertTrue(self.eph.is_temporary("sess_t1"))
+
+    def test_reap_one_guards_running_turn_then_discards(self):
+        import zcode_mcp.store as store
+
+        calls = []
+        orig_discard = store.discard_session
+        orig_running = self.eph._turn_running
+        store.discard_session = lambda sid: calls.append(sid) or {"session": 1}
+        try:
+            self.eph.register("sess_t1")
+            self.eph._turn_running = lambda sid: True
+            self.assertFalse(self.eph._reap_one("sess_t1"))  # turn moving: keep
+            self.assertTrue(self.eph.is_temporary("sess_t1"))
+            self.eph._turn_running = lambda sid: False
+            self.assertTrue(self.eph._reap_one("sess_t1"))  # idle: discard
+            self.assertEqual(calls, ["sess_t1"])
+            self.assertFalse(self.eph.is_temporary("sess_t1"))
+        finally:
+            store.discard_session = orig_discard
+            self.eph._turn_running = orig_running
+
+    def test_exit_discard_forces_and_forgets(self):
+        reaped = []
+
+        def fake_reap(sid, force=False):
+            reaped.append((sid, force))
+            with self.eph._lock:
+                self.eph._sessions.pop(sid, None)
+            return True
+
+        self.eph.register("sess_t3")
+        orig = self.eph._reap_one
+        self.eph._reap_one = fake_reap
+        try:
+            self.eph.discard_all_on_exit()
+        finally:
+            self.eph._reap_one = orig
+        self.assertEqual(reaped, [("sess_t3", True)])
+        self.assertFalse(self.eph.is_temporary("sess_t3"))
+
+    def test_reap_cycle_only_takes_due_sessions(self):
+        import time
+
+        from zcode_mcp import config
+
+        self.eph.register("sess_old")
+        self.eph.register("sess_new")
+        with self.eph._lock:
+            self.eph._sessions["sess_old"] -= config.TEMP_TTL + 60
+        due = self.eph._due_sids(time.monotonic(), config.TEMP_TTL)
+        self.assertEqual(sorted(due), ["sess_old"])
+
+    def test_reap_cycle_disabled_when_ttl_zero(self):
+        self.eph.register("sess_t2")
+        self.assertEqual(self.eph._reap_cycle(ttl=0), 0)
+        self.assertTrue(self.eph.is_temporary("sess_t2"))
+
+    def test_note_absent_for_regular_sessions(self):
+        self.assertEqual(self.eph.note("sess_never"), "")
+
+
 if __name__ == "__main__":
     unittest.main()

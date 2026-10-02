@@ -31,7 +31,8 @@ zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server（桥拉
   决请求、做出决策，turn 恢复。
 - **模型选择与额度** — 对话级按名称（`CPA/gpt-5.6-luna`）或 id 指定任意
   可寻址模型，可中途切换；一次调用查看全部套餐额度窗口。
-- **生命周期管理** — 项目级对话、一次性对话、归档/恢复、带预演保护的彻底删除。
+- **生命周期管理** — 项目级对话、用完即焚的一次性对话（`temporary`，适合
+  subagent 派工，无需手动清理）、归档/恢复、带预演保护的彻底删除。
 - **原生附件** — 文件/图片走 ZCode 自己的附件管线，与桌面端拖拽同款。
 - **桌面互通** — 会话存于共享存储，桌面端可列出、可续聊这里创建的一切。
 
@@ -132,7 +133,7 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 | `cwd`              | string   | `$ZCODE_MCP_WORKSPACE`       | 工作区目录（给了`project` 时被忽略）。                                                                                      |
 | `model`            | string   | `bigmodel-api/GLM-5.3-Flash` | 选择器：`providerId/modelId`、`ProviderName/modelId`（如 `CPA/gpt-5.6-luna`），可追加 `$reasoningLevel`。未给档位时优先 `high`。见 `zcode_models`。                    |
 | `mode`             | enum     | `yolo`                       | `plan` / `build` / `edit` / `yolo` / `auto`。非 yolo 模式会因审批暂停。                                             |
-| `temporary`        | boolean  | `false`                      | 一次性对话；用完配`zcode_session_discard`。                                                                                 |
+| `temporary`        | boolean  | `false`                      | 用完即焚的 subagent 对话——闲置 `ZCODE_MCP_TEMP_TTL`（默认 600s）后或桥退出时自动彻底删除。可与`project` 组合。                                                 |
 | `files`            | string[] | —                             | 附件绝对路径。                                                                                                                |
 | `attachments`      | object[] | —                             | 原生 ZCode 附件对象（高级透传）。                                                                                             |
 | `title_generation` | boolean  | `false`                      | 让 ZCode 自动生成对话标题。                                                                                                   |
@@ -263,6 +264,7 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 | `ZCODE_MCP_CREDENTIALS`   | `$ZCODE_HOME/v2/credentials.json`   | 覆盖 OAuth 凭据存储路径（额度）。                                                                                 |
 | `ZCODE_MCP_ZCODE_CONFIG`  | `$ZCODE_HOME/v2/config.json`        | 覆盖 provider 配置路径（Start Plan 余额）。                                                                       |
 | `ZCODE_MCP_PROVIDER_CONFIG` | `$ZCODE_HOME/v2/provider_config.json` | 覆盖 app-server provider 注册表路径（模型显示名与桌面专属来源）。                                                 |
+| `ZCODE_MCP_TEMP_TTL`      | `600`                               | `temporary: true` 对话闲置多少秒后自动彻底删除（运行中的 turn 不会被回收）；`0` 关闭闲置回收。                                     |
 | `ZCODE_MCP_APP_VERSION`   | `3.14.4`                            | 套餐额度端点携带的`app_version`。                                                                               |
 
 ## 工作原理

@@ -15,6 +15,7 @@ from typing import Any
 
 from .appserver import NODE_EXE, SERVER
 from . import config as _config
+from . import ephemeral
 from .config import DEFAULT_MODEL, DEFAULT_TIMEOUT, DEFAULT_WS, log
 from .protocol import (
     _message_texts,
@@ -78,6 +79,12 @@ def _aliases_for(available: list) -> dict:
     return build_provider_aliases(available or [])
 
 
+def _not_found(sid: str) -> str:
+    msg = f"error: session not found: {sid}"
+    hint = ephemeral.note(sid)
+    return f"{msg}\n{hint}" if hint else msg
+
+
 def tool_zcode_session_new(args: dict) -> str:
     project = args.get("project")
     if project:
@@ -119,6 +126,8 @@ def tool_zcode_session_new(args: dict) -> str:
         title_generation=bool(args.get("title_generation", False)),
         persistence="deferred" if temporary else None,
     )
+    if temporary:
+        ephemeral.register(sid)
     if selection:
         # setModel is the canonical switch path; it applies the reasoning
         # level that session/create's model param dropped
@@ -133,7 +142,11 @@ def tool_zcode_session_new(args: dict) -> str:
     atts += args.get("attachments") or []
     header = f"session_id={sid}\nworkspace={cwd}"
     if temporary:
-        header += "\n(temporary conversation: discard it with zcode_session_discard when done)"
+        header += (
+            f"\n(temporary conversation: auto-discarded after "
+            f"{_config.TEMP_TTL}s of inactivity or when the bridge exits; "
+            f"subagent workers need no manual cleanup)"
+        )
     if project:
         header += "\n(project conversation: ZCode edits files inside this project; "
         header += "the desktop app shows it under the project)"
@@ -147,7 +160,7 @@ def tool_zcode_session_new(args: dict) -> str:
 def tool_zcode_session_send(args: dict) -> str:
     sid = args["session_id"]
     if find_session(sid) is None:
-        return f"error: session not found: {sid}"
+        return _not_found(sid)
     try:
         atts = build_attachments(args.get("files"))
     except FileNotFoundError as e:
@@ -174,6 +187,8 @@ def tool_zcode_session_list(args: dict) -> str:
             continue
         ws = (s.get("workspace") or {}).get("workspacePath", "?")
         marker = " [archived]" if sid in archived else ""
+        if ephemeral.is_temporary(sid):
+            marker += " [temporary]"
         lines.append(
             f"{sid:40} {s.get('status', '?'):10} {s.get('mode', '?'):7} "
             f"{s.get('title', '(untitled)')} ({ws}){marker}"
@@ -191,7 +206,7 @@ def tool_zcode_session_status(args: dict) -> str:
     mon = SERVER._monitor(sid)
     s = find_session(sid)
     if s is None and not mon.events:
-        return f"error: session not found: {sid}"
+        return _not_found(sid)
     current_model = mon.current_model or (SERVER.last_models or {}).get("current")
     info = {
         "session_id": sid,
@@ -266,7 +281,7 @@ def tool_zcode_session_result(args: dict) -> str:
     sid = args["session_id"]
     session, mon = _session_context(sid)
     if session is None and not mon.events:
-        return f"error: session not found: {sid}"
+        return _not_found(sid)
     reply = mon.last_response
     if not reply and mon.turn_state != "running":
         try:
@@ -308,7 +323,7 @@ def tool_zcode_session_diff(args: dict) -> str:
     sid = args["session_id"]
     session = find_session(sid)
     if session is None:
-        return f"error: session not found: {sid}"
+        return _not_found(sid)
     workspace = (session.get("workspace") or {}).get("workspacePath")
     if not workspace or not os.path.isdir(workspace):
         return f"error: workspace not found for session: {sid}"
@@ -562,7 +577,9 @@ def tool_zcode_session_archive(args: dict) -> str:
     sid = args["session_id"]
     unarchive = bool(args.get("unarchive", False))
     if not session_exists(sid):
-        return f"error: session not found in session store: {sid}"
+        hint = ephemeral.note(sid)
+        base = f"error: session not found in session store: {sid}"
+        return f"{base}\n{hint}" if hint else base
     res = set_session_archived(sid, not unarchive)
     verb = "unarchived" if unarchive else "archived"
     return (
@@ -582,7 +599,9 @@ def tool_zcode_session_discard(args: dict) -> str:
     except Exception as e:
         return f"error: cannot inspect session store: {e}"
     if scope.get("session", 0) == 0:
-        return f"error: session not found in session store: {sid}"
+        hint = ephemeral.note(sid)
+        base = f"error: session not found in session store: {sid}"
+        return f"{base}\n{hint}" if hint else base
     total = sum(scope.values())
     if not confirm:
         rows = "\n".join(f"  {t}: {n}" for t, n in scope.items() if n)
@@ -644,8 +663,10 @@ TOOLS = [
                 "cwd": {"type": "string", "description": "Workspace directory for the new conversation "
                                                          "(ignored when project is given)."},
                 "temporary": {"type": "boolean",
-                              "description": "Create as a throwaway conversation (deferred persistence); "
-                                             "pair with zcode_session_discard when done."},
+                              "description": "Create as a throwaway subagent conversation: "
+                                             "auto-discarded after ZCODE_MCP_TEMP_TTL "
+                                             "(default 600s) of inactivity or when the bridge "
+                                             "exits. No manual cleanup needed."},
                 "model": {"type": "string",
                           "description": "Model selector for the conversation: modelId | "
                                          "providerId/modelId | providerId/modelId$reasoningLevel. "
@@ -775,10 +796,11 @@ TOOLS = [
     {
         "name": "zcode_session_discard",
         "description": (
-            "PERMANENTLY delete a ZCode conversation (session + full history) — "
-            "the throwaway counterpart of zcode_new(temporary=true). Without "
-            "confirm=true returns a dry-run row count; with confirm=true deletes "
-            "irreversibly."
+            "PERMANENTLY delete a ZCode conversation (session + full history). "
+            "Temporary conversations (zcode_session_new temporary=true) are "
+            "already auto-discarded; this is for early cleanup or for any "
+            "regular conversation. Without confirm=true returns a dry-run row "
+            "count; with confirm=true deletes irreversibly."
         ),
         "inputSchema": {
             "type": "object",

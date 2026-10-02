@@ -29,8 +29,9 @@ Core contract:
 
 | Goal | Call |
 |---|---|
-| Quick question / self-contained task, no file legacy | `zcode_session_new {text, temporary: true}` → `zcode_session_discard {session_id, confirm: true}` when done |
+| Quick question / self-contained task, no file legacy | `zcode_session_new {text, temporary: true}` — auto-discarded after ~10 min idle (TTL configurable) or when the bridge exits; no cleanup call needed |
 | **Work inside a real project** (edits must land in the repo, desktop shows it under the project) | `zcode_session_new {text, project: "D:/path/to/project"}` — the directory must already exist |
+| Project worker you won't need afterwards | `zcode_session_new {text, project: …, temporary: true}` — the worker edits the project but the conversation auto-cleans instead of accumulating in the desktop sidebar |
 | Long-lived worker for a project you'll come back to | `zcode_session_new {text, project: …}` (not temporary), `zcode_session_archive` when paused |
 | Follow-up / course correction on an existing conversation | `zcode_session_send {session_id, text}` |
 | Scratch sandbox work (no project) | `zcode_session_new {text}` (defaults to the bridge's sandbox workspace) |
@@ -39,7 +40,9 @@ Core contract:
 to that directory, ZCode reads/edits the project's real files, and the
 conversation shows up in the desktop app under that project. Never use
 `project` for throwaway questions — that litters the project's conversation
-list; use `temporary: true` instead.
+list; use `temporary: true` instead. `temporary` composes with `project`:
+dispatch workers that way whenever you consume their report in the
+orchestrator and don't need the conversation itself afterwards.
 
 ## Pattern A — blocking dispatch (simple, sequential)
 
@@ -51,6 +54,9 @@ zcode_session_new {project: "…", text: "<task + acceptance criteria>"}
 → verify (run tests, read the diff yourself), then zcode_session_send for fixes
 ```
 
+Add `temporary: true` when the worker's report is all you need — the
+conversation cleans itself up after you're done with it.
+
 ## Pattern B — fire-and-observe (parallel workers, long tasks)
 
 Use for long tasks or several workers at once. Blocking calls are also
@@ -59,7 +65,7 @@ resumable `timeout` (turn keeps running; call `zcode_session_wait` again) — bu
 fire-and-observe gives you progress visibility in between.
 
 ```
-1. zcode_session_new {project: "…", text: "…", wait: false} → session_id at once
+1. zcode_session_new {project: "…", text: "…", wait: false, temporary: true} → session_id at once
 2. zcode_session_status {session_id}     → is the turn running? event history
 3. zcode_session_output {session_id}     → the model's text so far (poll to refresh)
 4. … do your own work; poll again later …
@@ -67,6 +73,11 @@ fire-and-observe gives you progress visibility in between.
 6. zcode_session_result {session_id}     → structured terminal result
 7. zcode_session_diff {session_id}       → verify workspace changes
 ```
+
+Every `zcode_session_*` call on the worker refreshes its idle clock, so a
+temporary worker being actively orchestrated is never reaped mid-flight;
+reaping only targets conversations abandoned past the TTL while no turn is
+running.
 
 While workers run, you can dispatch more workers, answer the user, or review
 partial output early and `zcode_session_stop {session_id}` a worker that went the
@@ -98,11 +109,14 @@ ZCode starts with zero context about your conversation. Include in `text`:
 
 ## Lifecycle hygiene
 
-- Scratch conversation → `zcode_session_discard {session_id, confirm: true}`
-  (dry-run first without `confirm` to see the scope).
+- Temporary conversations (`temporary: true`) clean themselves up — after
+  ~10 min idle (TTL configurable via `ZCODE_MCP_TEMP_TTL`) or on bridge exit.
+  `zcode_session_discard {session_id, confirm: true}` is only for early
+  cleanup or for regular conversations you want gone now.
 - Finished project conversation worth keeping → `zcode_session_archive {session_id}`.
 - Paused worker you'll resume → leave it; `zcode_session_send` reactivates it later.
-- `zcode_session_list {}` shows active conversations (archived hidden);
+- `zcode_session_list {}` shows active conversations (archived hidden;
+  temporary ones marked `[temporary]`);
   `zcode_session_list {include_archived: true}` shows everything with markers.
 
 ## Model choice per worker

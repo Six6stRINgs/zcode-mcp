@@ -34,8 +34,9 @@ Pure Python standard library — the only optional dependency is
 - **Model selection & quota** — choose any session-addressable model per
   conversation by name (`CPA/gpt-5.6-luna`) or id, switch mid-flight, and
   check all plan quota windows in one call.
-- **Lifecycle control** — project-scoped and throwaway conversations,
-  archive/unarchive, and permanent delete with a dry-run guard.
+- **Lifecycle control** — project-scoped and self-cleaning throwaway
+  (`temporary`) conversations for subagent dispatch, archive/unarchive, and
+  permanent delete with a dry-run guard.
 - **Native attachments** — files and images go through ZCode's own
   attachment pipeline, exactly like dragging them into the desktop composer.
 - **Desktop interoperability** — sessions live in the shared store; the
@@ -145,7 +146,7 @@ Two families, by design:
 | `cwd`              | string   | `$ZCODE_MCP_WORKSPACE`       | Workspace directory (ignored when`project` is given).                                                                                          |
 | `model`            | string   | `bigmodel-api/GLM-5.3-Flash` | Selector: `providerId/modelId`, `ProviderName/modelId` (e.g. `CPA/gpt-5.6-luna`), optionally `$reasoningLevel`. `high` is the preferred level when none is given. See `zcode_models`.       |
 | `mode`             | enum     | `yolo`                       | `plan` / `build` / `edit` / `yolo` / `auto`. Non-yolo modes pause for approvals.                                                       |
-| `temporary`        | boolean  | `false`                      | Throwaway conversation; pair with`zcode_session_discard`.                                                                                      |
+| `temporary`        | boolean  | `false`                      | Throwaway subagent conversation — auto-discarded after `ZCODE_MCP_TEMP_TTL` (default 600s) of inactivity or when the bridge exits. Composes with `project`. |
 | `files`            | string[] | —                             | Absolute paths of files to attach.                                                                                                               |
 | `attachments`      | object[] | —                             | Raw ZCode attachment objects (advanced passthrough).                                                                                             |
 | `title_generation` | boolean  | `false`                      | Let ZCode auto-generate the conversation title.                                                                                                  |
@@ -278,6 +279,7 @@ by name returns guidance instead of a silent failure.
 | `ZCODE_MCP_CREDENTIALS`   | `$ZCODE_HOME/v2/credentials.json`   | Override OAuth credential store path (quota).                                                                                                            |
 | `ZCODE_MCP_ZCODE_CONFIG`  | `$ZCODE_HOME/v2/config.json`        | Override provider config path (Start Plan balance).                                                                                                      |
 | `ZCODE_MCP_PROVIDER_CONFIG` | `$ZCODE_HOME/v2/provider_config.json` | Override app-server provider registry path (model names & desktop-managed sources).                                                                      |
+| `ZCODE_MCP_TEMP_TTL`      | `600`                               | Seconds of inactivity before a `temporary: true` conversation is auto-discarded (running turns are never reaped); `0` disables idle reaping.              |
 | `ZCODE_MCP_APP_VERSION`   | `3.14.4`                            | `app_version` sent to plan-quota endpoints.                                                                                                            |
 
 ## How it works

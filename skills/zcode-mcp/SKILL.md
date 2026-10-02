@@ -59,9 +59,11 @@ Two things to internalize before calling anything:
   that should land in a repo.
 - `zcode_session_new {text}` without `project` — lands in the bridge's sandbox
   workspace (env `ZCODE_MCP_WORKSPACE`); fine for questions and scratch.
-- `temporary: true` — throwaway conversation; pair with
-  `zcode_session_discard {session_id, confirm: true}` when done (dry-run first
-  without `confirm`).
+- `temporary: true` — throwaway subagent conversation: the bridge
+  auto-discards it after `ZCODE_MCP_TEMP_TTL` (default 600s) of inactivity
+  or when the bridge exits — no manual cleanup. Every tool call on the
+  session refreshes its idle clock, and a running turn is never reaped.
+  `zcode_session_discard` remains available for early deletion.
 - `zcode_session_archive {session_id}` — keep history, hide from lists;
   `unarchive: true` restores.
 
@@ -122,7 +124,8 @@ Statuses you can see from a blocked/collected turn:
 
 ## Decision guide
 
-- One-off question, nothing to clean → `zcode_session_new {temporary: true}`, read reply, `zcode_session_discard`.
+- One-off question, nothing to clean → `zcode_session_new {temporary: true}`;
+  the conversation auto-discards itself afterwards.
 - Task touching a repo → `zcode_session_new {project: …}`; verify the workspace
   yourself afterwards with `zcode_session_result`, `zcode_session_diff`, tests, and diffs.
 - Long or parallel work → `wait: false`, poll `zcode_session_status`/`zcode_session_output`,
