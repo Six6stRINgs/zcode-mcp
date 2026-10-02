@@ -69,7 +69,7 @@ auto-detected from the common install locations (`%LOCALAPPDATA%/Programs/ZCode`
 the MCP registration:
 
 ```bash
-codex mcp add zcode-mcp --env ZCODE_CJS="<install-dir>/resources/glm/zcode.cjs" -- uvx --from "<path-to>/zcode-mcp" zcode-mcp
+codex mcp add zcode-mcp --env ZCODE_CJS="<install-dir>/resources/glm/zcode.cjs" -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp
 ```
 
 On Windows you can also add the directory that contains `zcode.cjs`
@@ -237,21 +237,21 @@ No parameters.
 
 ## Skills
 
-This repository ships ready-made skill documents (for Codex, Claude Code and
-other clients that read `SKILL.md` files). Install them with one command:
+This repository ships ready-made skill documents (for Codex and other
+clients that read `SKILL.md` files): `zcode-mcp` (overview: tools, core
+concepts, decision guide), `zcode-subagent` (orchestrating ZCode as a
+subagent worker) and `zcode-code-reviewer` (read-only code review over a
+diff).
+
+To install them with Codex, copy the skill folders into the Codex skills
+directory:
 
 ```bash
-python install_skills.py            # copies ./skills/* into ~/.codex/skills
-```
+# macOS / Linux
+cp -r skills/* ~/.codex/skills/
 
-- **`zcode-mcp`** — the overview: tools, core concepts, decision guide.
-- **`zcode-subagent`** — orchestrating ZCode as a subagent worker: dispatch
-  patterns, verification loops, permission gating, lifecycle hygiene.
-- **`zcode-code-reviewer`** — a code review skill that drives ZCode as a
-  read-only reviewer over a diff.
-
-Use `python install_skills.py --list` to preview, or `--dest` to target a
-different skills directory.
+# Windows (PowerShell)
+Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 
 ## Configuration (environment variables)
 

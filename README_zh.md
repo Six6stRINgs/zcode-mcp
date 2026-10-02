@@ -61,7 +61,7 @@ ZCode 装在别处，把 `ZCODE_CJS` 环境变量指向它——可以设为全�
 MCP 注册时指定：
 
 ```bash
-codex mcp add zcode-mcp --env ZCODE_CJS="<安装目录>/resources/glm/zcode.cjs" -- uvx --from "<路径>/zcode-mcp" zcode-mcp
+codex mcp add zcode-mcp --env ZCODE_CJS="<安装目录>/resources/glm/zcode.cjs" -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp
 ```
 
 Windows 下也可以在**系统环境变量**里新建 `ZCODE_CJS`，值为 `zcode.cjs`
@@ -227,20 +227,18 @@ MCP server。
 
 ## 技能（Skills）
 
-本仓库自带现成的技能文档（供 Codex、Claude Code 等读取 `SKILL.md` 的客户端
-使用），一条命令安装：
+本仓库自带现成的技能文档（供 Codex 等读取 `SKILL.md` 文件的客户端使用）：
+`zcode-mcp`（总纲：工具、核心概念、选型指南）、`zcode-subagent`（把 ZCode
+当 subagent 工人编排）、`zcode-code-reviewer`（只读代码评审）。
+
+Codex 的安装方式是把技能文件夹复制进 Codex 的 skills 目录：
 
 ```bash
-python install_skills.py            # 把 ./skills/* 复制到 ~/.codex/skills
-```
+# macOS / Linux
+cp -r skills/* ~/.codex/skills/
 
-- **`zcode-mcp`** — 总纲：工具、核心概念、选型指南。
-- **`zcode-subagent`** — 分册：把 ZCode 当 subagent 工人编排——派发模式、
-  验收闭环、权限闸门、生命周期卫生。
-- **`zcode-code-reviewer`** — 代码评审技能：让 ZCode 以只读评审员身份审查
-  diff。
-
-`python install_skills.py --list` 可预览；`--dest` 可指定其他 skills 目录。
+# Windows（PowerShell）
+Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 
 ## 配置（环境变量）
 
