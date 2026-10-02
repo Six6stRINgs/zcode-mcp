@@ -51,15 +51,17 @@ Pure Python standard library — the only optional dependency is
 
 **Install & register with Codex CLI**
 
+One command, straight from this repository — no clone, no install:
+
 ```bash
-git clone https://github.com/Six6stRINgs/zcode-mcp.git
-codex mcp add zcode-mcp -- uvx --from "<path-to>/zcode-mcp" zcode-mcp
+codex mcp add zcode-mcp -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp
 ```
 
-`uvx` builds an isolated environment from `pyproject.toml` automatically —
-nothing to install by hand. (Once the package is on PyPI this shortens to
-`uvx zcode-mcp`; `pip install -e .` with the bundled `zcode-mcp` entry point
-also works.)
+`uvx` fetches the repo, builds an isolated environment from
+`pyproject.toml` and exposes the `zcode-mcp` entry point — nothing to
+install by hand. To pin a version, append `@<tag>` to the git URL. (Once
+the package is on PyPI this shortens to `uvx zcode-mcp`; for development,
+clone the repo and point `--from` at your local copy.)
 
 **ZCode CLI path (`zcode.cjs`)** — the bridge drives ZCode through its CLI
 entry, normally at `<ZCode install dir>/resources/glm/zcode.cjs`. It is
