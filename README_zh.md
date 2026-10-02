@@ -225,52 +225,6 @@ MCP server。
 
 无参数。
 
-## 使用模式
-
-### 异步发射（长任务、并行工人）
-
-```
-1. zcode_session_new {text, project: "…", wait: false}   → 立刻拿到 session_id
-2. zcode_session_status {session_id}                     → turn 在跑吗？事件流水？
-3. zcode_session_output {session_id}                     → 模型已输出的文本
-4. zcode_session_wait {session_id}                       → 收割最终回复
-```
-
-wait 超时的说明里会标注 turn 此刻的状态（`streaming` 流式输出中 /
-`producing` 思考或工具运行中 / `stalled` 卡住）并附已输出内容。注意观测
-是轮询式的：桥实时累积模型增量，但你在调用时才读到——没有推送。
-
-### 模型选择与额度
-
-```
-zcode_models {}                                              → 全量模型目录
-zcode_session_new {text, project: "…", model: "GLM-5.3-Flash"}
-zcode_session_set_model {session_id, model: "…$reasoningLevel"}
-zcode_quota {}                                               → 全部套餐窗口与余额
-```
-
-选择器规范格式：`providerId/modelId`，可追加 `$reasoningLevel`。未指定
-档位时优先 `high`（模型支持的话）。不显式指定 `model` 时默认使用内置的
-`bigmodel-api/GLM-5.3-Flash`（可用 `ZCODE_MCP_DEFAULT_MODEL` 覆盖）。
-某个供应商凭据冷却时，切个模型继续干活。
-
-### 生命周期：临时 / 归档 / 丢弃
-
-```
-sid = zcode_session_new {text, temporary: true}     → 一次性对话
-… zcode_session_send / zcode_session_wait …
-zcode_session_discard {session_id: sid}             → 预演：将删除的行数
-zcode_session_discard {session_id: sid, confirm: true} → 永久删除（不可恢复）
-
-zcode_session_archive {session_id}                  → 从列表隐藏（不删除）
-zcode_session_list {include_archived: true}         → 带 [archived] 标记列出
-zcode_session_archive {session_id, unarchive: true} → 恢复
-```
-
-归档/删除直接维护 ZCode 的两个共享存储（协议本身没有这类方法）：会话库
-（`session.time_archived`）和桌面任务索引（`tasks.archived` /
-`tasks.deleted`）。不要 discard 桌面端当前正打开的对话。
-
 ## 配置（环境变量）
 
 | 变量                        | 默认值                                | 说明                                                                                                              |

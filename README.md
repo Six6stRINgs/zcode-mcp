@@ -236,55 +236,6 @@ Returns `current_model`, `persisted_status` (desktop store; may lag),
 
 No parameters.
 
-## Usage patterns
-
-### Fire-and-observe (long tasks, parallel workers)
-
-```
-1. zcode_session_new {text, project: "…", wait: false}   → session_id at once
-2. zcode_session_status {session_id}                     → turn running? events?
-3. zcode_session_output {session_id}                     → model's text so far (poll)
-4. zcode_session_wait {session_id}                       → final reply
-```
-
-On a wait timeout the note classifies the live turn as `streaming`,
-`producing` (thinking / running tools) or `stalled`, and includes the output
-so far. Note that observation is poll-based: the bridge accumulates the
-model's deltas live, but you see them when you call — there is no push.
-
-### Model selection & quota
-
-```
-zcode_models {}                                              → full catalogue
-zcode_session_new {text, project: "…", model: "GLM-5.3-Flash"}
-zcode_session_set_model {session_id, model: "…$reasoningLevel"}
-zcode_quota {}                                               → all plan windows & balances
-```
-
-Selectors are `providerId/modelId`, optionally `$reasoningLevel`. With no
-level, `high` is preferred when the model supports it. Without `model`,
-conversations default to the built-in `bigmodel-api/GLM-5.3-Flash`
-(override with `ZCODE_MCP_DEFAULT_MODEL`). When one provider's credentials
-are cooling down, switch models and keep working.
-
-### Lifecycle: temporary, archive, discard
-
-```
-sid = zcode_session_new {text, temporary: true}     → throwaway conversation
-… zcode_session_send / zcode_session_wait …
-zcode_session_discard {session_id: sid}             → dry-run: what would be deleted
-zcode_session_discard {session_id: sid, confirm: true}
-
-zcode_session_archive {session_id}                  → hide from lists (nothing deleted)
-zcode_session_list {include_archived: true}         → shows it with an [archived] marker
-zcode_session_archive {session_id, unarchive: true} → restored
-```
-
-Archive/discard maintain ZCode's two shared stores directly (the protocol
-has no such methods): the session store (`session.time_archived`) and the
-desktop task index (`tasks.archived` / `tasks.deleted`). Never discard a
-conversation the desktop app currently has open.
-
 ## Configuration (environment variables)
 
 | Variable | Default | Purpose |
