@@ -52,9 +52,7 @@ codex mcp add zcode-mcp -- uvx --from "git+https://github.com/Six6stRINgs/zcode-
 ```
 
 `uvx` 会拉取仓库、按 `pyproject.toml` 自动构建隔离环境并暴露
-`zcode-mcp` 入口。要固定版本，在 git URL 后追加 `@<tag>`。（发布到 PyPI
-之后可简化为 `uvx zcode-mcp`；开发时克隆仓库后把 `--from` 指向本地副本
-即可。）
+`zcode-mcp` 入口。要固定版本，在 git URL 后追加 `@<tag>`。
 
 **ZCode CLI 路径（`zcode.cjs`）**——桥通过 ZCode 的 CLI 入口驱动它，通常
 位于 `<ZCode 安装目录>/resources/glm/zcode.cjs`。会自动扫描常见安装位置
