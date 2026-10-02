@@ -73,8 +73,7 @@ codex mcp add zcode-mcp --env ZCODE_CJS="<install-dir>/resources/glm/zcode.cjs" 
 ```
 
 On Windows you can also add the directory that contains `zcode.cjs`
-(`…
-esources\glm`) to the **system environment variable** `ZCODE_CJS`
+(`… esources\glm`) to the **system environment variable** `ZCODE_CJS`
 (Settings → System → About → Advanced system settings → Environment
 Variables) instead of per-server config — the bridge reads it either way.
 
@@ -92,63 +91,63 @@ Two families, by design:
 
 **Standalone** — no conversation needed:
 
-| Tool | Purpose |
-|---|---|
+| Tool             | Purpose                                                                                                                              |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------------------------ |
 | `zcode_models` | Every model across every configured provider (built-in, Coding Plan / Start Plan, custom), with reasoning levels and context windows |
-| `zcode_quota` | All plan quotas in one call: GLM Coding Plan windows and Start Plan token balances |
-| `zcode_health` | Bridge, Node.js, ZCode CLI and app-server health check |
+| `zcode_quota`  | All plan quotas in one call: GLM Coding Plan windows and Start Plan token balances                                                   |
+| `zcode_health` | Bridge, Node.js, ZCode CLI and app-server health check                                                                               |
 
 **Conversation-scoped** — all take a `session_id`:
 
-| Tool | Purpose |
-|---|---|
-| `zcode_session_new` | New conversation + first message; blocks for the reply unless `wait: false` |
-| `zcode_session_send` | Follow-up message (text and/or attachments) |
-| `zcode_session_status` | Live state: model in use, turn state, pending interactions, events |
-| `zcode_session_output` | What the model has written so far in the running turn (poll-based), or the last reply |
-| `zcode_session_result` | Compact machine-readable result: status, reply, error, model |
-| `zcode_session_diff` | Git status / changed files / bounded diff for the worker's workspace |
-| `zcode_session_read` | Recent message history (idle conversations only) |
-| `zcode_session_wait` | Block until the running turn ends; returns the reply |
-| `zcode_session_stop` | Interrupt the running turn |
-| `zcode_session_set_model` | Switch the conversation's model (next message on) |
-| `zcode_session_permissions` | Pending permission / user-input requests |
-| `zcode_session_decide` | Answer a pending request (allow/deny) — turn resumes |
-| `zcode_session_archive` | Hide a conversation from lists (nothing deleted); `unarchive: true` restores |
-| `zcode_session_discard` | Permanently delete (dry-run row counts unless `confirm: true`) |
+| Tool                          | Purpose                                                                               |
+| ----------------------------- | ------------------------------------------------------------------------------------- |
+| `zcode_session_new`         | New conversation + first message; blocks for the reply unless`wait: false`          |
+| `zcode_session_send`        | Follow-up message (text and/or attachments)                                           |
+| `zcode_session_status`      | Live state: model in use, turn state, pending interactions, events                    |
+| `zcode_session_output`      | What the model has written so far in the running turn (poll-based), or the last reply |
+| `zcode_session_result`      | Compact machine-readable result: status, reply, error, model                          |
+| `zcode_session_diff`        | Git status / changed files / bounded diff for the worker's workspace                  |
+| `zcode_session_read`        | Recent message history (idle conversations only)                                      |
+| `zcode_session_wait`        | Block until the running turn ends; returns the reply                                  |
+| `zcode_session_stop`        | Interrupt the running turn                                                            |
+| `zcode_session_set_model`   | Switch the conversation's model (next message on)                                     |
+| `zcode_session_permissions` | Pending permission / user-input requests                                              |
+| `zcode_session_decide`      | Answer a pending request (allow/deny) — turn resumes                                 |
+| `zcode_session_archive`     | Hide a conversation from lists (nothing deleted);`unarchive: true` restores         |
+| `zcode_session_discard`     | Permanently delete (dry-run row counts unless`confirm: true`)                       |
 
 ### Parameters
 
 #### `zcode_session_new`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `text` | string | **required** | First message to send. |
-| `project` | string | — | Absolute path to an existing project directory; the conversation becomes project-scoped and edits land in that repo. Overrides `cwd`. |
-| `cwd` | string | `$ZCODE_MCP_WORKSPACE` | Workspace directory (ignored when `project` is given). |
-| `model` | string | `bigmodel-api/GLM-5.3-Flash` | Selector: `providerId/modelId`, optionally `$reasoningLevel`. `high` is the preferred level when none is given. See `zcode_models`. |
-| `mode` | enum | `yolo` | `plan` / `build` / `edit` / `yolo` / `auto`. Non-yolo modes pause for approvals. |
-| `temporary` | boolean | `false` | Throwaway conversation; pair with `zcode_session_discard`. |
-| `files` | string[] | — | Absolute paths of files to attach. |
-| `attachments` | object[] | — | Raw ZCode attachment objects (advanced passthrough). |
-| `title_generation` | boolean | `false` | Let ZCode auto-generate the conversation title. |
-| `wait` | boolean | `true` | Block until the turn ends. |
-| `timeout_sec` | integer | `600` | Max seconds to wait; capped by `ZCODE_MCP_TOOL_BUDGET` (default 240). On a cap hit the turn keeps running — call `zcode_session_wait` again. |
+| Parameter            | Type     | Default                        | Description                                                                                                                                      |
+| -------------------- | -------- | ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `text`             | string   | **required**             | First message to send.                                                                                                                           |
+| `project`          | string   | —                             | Absolute path to an existing project directory; the conversation becomes project-scoped and edits land in that repo. Overrides`cwd`.           |
+| `cwd`              | string   | `$ZCODE_MCP_WORKSPACE`       | Workspace directory (ignored when`project` is given).                                                                                          |
+| `model`            | string   | `bigmodel-api/GLM-5.3-Flash` | Selector:`providerId/modelId`, optionally `$reasoningLevel`. `high` is the preferred level when none is given. See `zcode_models`.       |
+| `mode`             | enum     | `yolo`                       | `plan` / `build` / `edit` / `yolo` / `auto`. Non-yolo modes pause for approvals.                                                       |
+| `temporary`        | boolean  | `false`                      | Throwaway conversation; pair with`zcode_session_discard`.                                                                                      |
+| `files`            | string[] | —                             | Absolute paths of files to attach.                                                                                                               |
+| `attachments`      | object[] | —                             | Raw ZCode attachment objects (advanced passthrough).                                                                                             |
+| `title_generation` | boolean  | `false`                      | Let ZCode auto-generate the conversation title.                                                                                                  |
+| `wait`             | boolean  | `true`                       | Block until the turn ends.                                                                                                                       |
+| `timeout_sec`      | integer  | `600`                        | Max seconds to wait; capped by`ZCODE_MCP_TOOL_BUDGET` (default 240). On a cap hit the turn keeps running — call `zcode_session_wait` again. |
 
 #### `zcode_session_send`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation (bridge- or desktop-created). |
-| `text` | string | **required** | Follow-up message text. |
-| `files` / `attachments` | — | — | Same as `zcode_session_new`. |
-| `wait` | boolean | `true` | Block until the turn ends. |
-| `timeout_sec` | integer | `600` | Same budget cap as above. |
+| Parameter                   | Type    | Default            | Description                                       |
+| --------------------------- | ------- | ------------------ | ------------------------------------------------- |
+| `session_id`              | string  | **required** | Target conversation (bridge- or desktop-created). |
+| `text`                    | string  | **required** | Follow-up message text.                           |
+| `files` / `attachments` | —      | —                 | Same as`zcode_session_new`.                     |
+| `wait`                    | boolean | `true`           | Block until the turn ends.                        |
+| `timeout_sec`             | integer | `600`            | Same budget cap as above.                         |
 
 #### `zcode_session_status`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
+| Parameter      | Type   | Default            | Description          |
+| -------------- | ------ | ------------------ | -------------------- |
 | `session_id` | string | **required** | Target conversation. |
 
 Returns `current_model`, `persisted_status` (desktop store; may lag),
@@ -156,102 +155,120 @@ Returns `current_model`, `persisted_status` (desktop store; may lag),
 
 #### `zcode_session_output`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation. |
-| `max_chars` | integer | `4000` | Tail length of the returned text. |
+| Parameter      | Type    | Default            | Description                       |
+| -------------- | ------- | ------------------ | --------------------------------- |
+| `session_id` | string  | **required** | Target conversation.              |
+| `max_chars`  | integer | `4000`           | Tail length of the returned text. |
 
 #### `zcode_session_result`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
+| Parameter      | Type   | Default            | Description          |
+| -------------- | ------ | ------------------ | -------------------- |
 | `session_id` | string | **required** | Target conversation. |
 
 #### `zcode_session_diff`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation (its workspace is inspected). |
-| `include_diff` | boolean | `false` | Include a bounded unified diff. |
-| `max_chars` | integer | `20000` | Max diff characters when `include_diff` is on. |
+| Parameter        | Type    | Default            | Description                                       |
+| ---------------- | ------- | ------------------ | ------------------------------------------------- |
+| `session_id`   | string  | **required** | Target conversation (its workspace is inspected). |
+| `include_diff` | boolean | `false`          | Include a bounded unified diff.                   |
+| `max_chars`    | integer | `20000`          | Max diff characters when`include_diff` is on.   |
 
 #### `zcode_session_read`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation (must have no running turn). |
-| `message_limit` | integer | `50` | How many recent messages to read. |
+| Parameter         | Type    | Default            | Description                                      |
+| ----------------- | ------- | ------------------ | ------------------------------------------------ |
+| `session_id`    | string  | **required** | Target conversation (must have no running turn). |
+| `message_limit` | integer | `50`             | How many recent messages to read.                |
 
 #### `zcode_session_wait`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation. |
-| `timeout_sec` | integer | `600` | Same budget cap as above. On timeout the note says whether the turn is streaming, producing or stalled. |
+| Parameter       | Type    | Default            | Description                                                                                             |
+| --------------- | ------- | ------------------ | ------------------------------------------------------------------------------------------------------- |
+| `session_id`  | string  | **required** | Target conversation.                                                                                    |
+| `timeout_sec` | integer | `600`            | Same budget cap as above. On timeout the note says whether the turn is streaming, producing or stalled. |
 
 #### `zcode_session_stop`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
+| Parameter      | Type   | Default            | Description          |
+| -------------- | ------ | ------------------ | -------------------- |
 | `session_id` | string | **required** | Target conversation. |
 
 #### `zcode_session_set_model`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation. |
-| `model` | string | **required** | `providerId/modelId` or `providerId/modelId$reasoningLevel`. |
+| Parameter      | Type   | Default            | Description                                                      |
+| -------------- | ------ | ------------------ | ---------------------------------------------------------------- |
+| `session_id` | string | **required** | Target conversation.                                             |
+| `model`      | string | **required** | `providerId/modelId` or `providerId/modelId$reasoningLevel`. |
 
 #### `zcode_session_permissions`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
+| Parameter      | Type   | Default            | Description          |
+| -------------- | ------ | ------------------ | -------------------- |
 | `session_id` | string | **required** | Target conversation. |
 
 #### `zcode_session_decide`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `request_id` | string | **required** | Pending request id (from `zcode_session_permissions`). |
-| `session_id` | string | — | Validated against the pending request when given. |
-| `approve` | boolean | — | `true` → allow, `false` → deny. |
-| `decision` | enum | — | `allow` / `deny` / `escalate` / `modify` (overrides `approve`). |
-| `reason` | string | — | Optional explanation attached to the decision. |
+| Parameter      | Type    | Default            | Description                                                               |
+| -------------- | ------- | ------------------ | ------------------------------------------------------------------------- |
+| `request_id` | string  | **required** | Pending request id (from`zcode_session_permissions`).                   |
+| `session_id` | string  | —                 | Validated against the pending request when given.                         |
+| `approve`    | boolean | —                 | `true` → allow, `false` → deny.                                     |
+| `decision`   | enum    | —                 | `allow` / `deny` / `escalate` / `modify` (overrides `approve`). |
+| `reason`     | string  | —                 | Optional explanation attached to the decision.                            |
 
 #### `zcode_session_archive`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation. |
-| `unarchive` | boolean | `false` | Restore instead of archive. |
+| Parameter      | Type    | Default            | Description                 |
+| -------------- | ------- | ------------------ | --------------------------- |
+| `session_id` | string  | **required** | Target conversation.        |
+| `unarchive`  | boolean | `false`          | Restore instead of archive. |
 
 #### `zcode_session_discard`
 
-| Parameter | Type | Default | Description |
-|---|---|---|---|
-| `session_id` | string | **required** | Target conversation. |
-| `confirm` | boolean | `false` | `false` = dry-run (row counts); `true` = irreversible delete. |
+| Parameter      | Type    | Default            | Description                                                       |
+| -------------- | ------- | ------------------ | ----------------------------------------------------------------- |
+| `session_id` | string  | **required** | Target conversation.                                              |
+| `confirm`    | boolean | `false`          | `false` = dry-run (row counts); `true` = irreversible delete. |
 
 #### `zcode_models` / `zcode_quota` / `zcode_health`
 
 No parameters.
 
+## Skills
+
+This repository ships ready-made skill documents (for Codex, Claude Code and
+other clients that read `SKILL.md` files). Install them with one command:
+
+```bash
+python install_skills.py            # copies ./skills/* into ~/.codex/skills
+```
+
+- **`zcode-mcp`** — the overview: tools, core concepts, decision guide.
+- **`zcode-subagent`** — orchestrating ZCode as a subagent worker: dispatch
+  patterns, verification loops, permission gating, lifecycle hygiene.
+- **`zcode-code-reviewer`** — a code review skill that drives ZCode as a
+  read-only reviewer over a diff.
+
+Use `python install_skills.py --list` to preview, or `--dest` to target a
+different skills directory.
+
 ## Configuration (environment variables)
 
-| Variable | Default | Purpose |
-|---|---|---|
-| `ZCODE_CJS` | auto-detected | Path to the ZCode CLI entry (`<install dir>/resources/glm/zcode.cjs`). When unset, common install locations are scanned. |
-| `ZCODE_MCP_WORKSPACE` | `<repo>/sandbox` | Default workspace for `zcode_session_new`. |
-| `ZCODE_MCP_DEFAULT_MODEL` | `bigmodel-api/GLM-5.3-Flash` | Model used when `zcode_session_new` gets no `model`. |
-| `ZCODE_MCP_TOOL_BUDGET` | `240` | Cap for any single blocking tool call (seconds). MCP clients like Codex abort a tools/call at ~300s; the bridge returns a resumable timeout before that. |
-| `ZCODE_MCP_DEBUG` | off | Verbose protocol logging (`bridge.log`, `child_dump.log`). |
-| `ZCODE_MCP_NO_WARMUP` | off | Skip the app-server warm-up spawn. |
-| `ZCODE_HOME` | `~/.zcode` | Root of ZCode's shared stores. |
-| `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | Override session store path. |
-| `ZCODE_MCP_TASKS_INDEX` | `$ZCODE_HOME/v2/tasks-index.sqlite` | Override desktop task-index path. |
-| `ZCODE_MCP_CREDENTIALS` | `$ZCODE_HOME/v2/credentials.json` | Override OAuth credential store path (quota). |
-| `ZCODE_MCP_ZCODE_CONFIG` | `$ZCODE_HOME/v2/config.json` | Override provider config path (Start Plan balance). |
-| `ZCODE_MCP_APP_VERSION` | `3.14.4` | `app_version` sent to plan-quota endpoints. |
+| Variable                    | Default                               | Purpose                                                                                                                                                  |
+| --------------------------- | ------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `ZCODE_CJS`               | auto-detected                         | Path to the ZCode CLI entry (`<install dir>/resources/glm/zcode.cjs`). When unset, common install locations are scanned.                               |
+| `ZCODE_MCP_WORKSPACE`     | `<repo>/sandbox`                    | Default workspace for`zcode_session_new`.                                                                                                              |
+| `ZCODE_MCP_DEFAULT_MODEL` | `bigmodel-api/GLM-5.3-Flash`        | Model used when`zcode_session_new` gets no `model`.                                                                                                  |
+| `ZCODE_MCP_TOOL_BUDGET`   | `240`                               | Cap for any single blocking tool call (seconds). MCP clients like Codex abort a tools/call at ~300s; the bridge returns a resumable timeout before that. |
+| `ZCODE_MCP_DEBUG`         | off                                   | Verbose protocol logging (`bridge.log`, `child_dump.log`).                                                                                           |
+| `ZCODE_MCP_NO_WARMUP`     | off                                   | Skip the app-server warm-up spawn.                                                                                                                       |
+| `ZCODE_HOME`              | `~/.zcode`                          | Root of ZCode's shared stores.                                                                                                                           |
+| `ZCODE_MCP_SESSION_DB`    | `$ZCODE_HOME/cli/db/db.sqlite`      | Override session store path.                                                                                                                             |
+| `ZCODE_MCP_TASKS_INDEX`   | `$ZCODE_HOME/v2/tasks-index.sqlite` | Override desktop task-index path.                                                                                                                        |
+| `ZCODE_MCP_CREDENTIALS`   | `$ZCODE_HOME/v2/credentials.json`   | Override OAuth credential store path (quota).                                                                                                            |
+| `ZCODE_MCP_ZCODE_CONFIG`  | `$ZCODE_HOME/v2/config.json`        | Override provider config path (Start Plan balance).                                                                                                      |
+| `ZCODE_MCP_APP_VERSION`   | `3.14.4`                            | `app_version` sent to plan-quota endpoints.                                                                                                            |
 
 ## How it works
 
@@ -288,17 +305,6 @@ reference during development; it is not part of the package.
 - Don't discard a conversation the desktop app currently has open; discarding
   a running session is best-effort. `zcode_session_discard` is irreversible —
   always dry-run first.
-
-## Skills
-
-Ship-ready skill documents live in [`skills/`](skills/); copy what you need
-into your client's skills directory (e.g. `~/.codex/skills/` for Codex):
-
-- **[`zcode-mcp`](skills/zcode-mcp/SKILL.md)** — the overview: tools, core
-  concepts, decision guide.
-- **[`zcode-subagent`](skills/zcode-subagent/SKILL.md)** — orchestrating
-  ZCode as a subagent worker: dispatch patterns, verification loops,
-  permission gating, lifecycle hygiene.
 
 ## License
 

@@ -225,6 +225,23 @@ MCP server。
 
 无参数。
 
+## 技能（Skills）
+
+本仓库自带现成的技能文档（供 Codex、Claude Code 等读取 `SKILL.md` 的客户端
+使用），一条命令安装：
+
+```bash
+python install_skills.py            # 把 ./skills/* 复制到 ~/.codex/skills
+```
+
+- **`zcode-mcp`** — 总纲：工具、核心概念、选型指南。
+- **`zcode-subagent`** — 分册：把 ZCode 当 subagent 工人编排——派发模式、
+  验收闭环、权限闸门、生命周期卫生。
+- **`zcode-code-reviewer`** — 代码评审技能：让 ZCode 以只读评审员身份审查
+  diff。
+
+`python install_skills.py --list` 可预览；`--dest` 可指定其他 skills 目录。
+
 ## 配置（环境变量）
 
 | 变量                        | 默认值                                | 说明                                                                                                              |
@@ -274,16 +291,6 @@ MCP server。
 - Windows 优先（默认路径指向 Windows 版 ZCode），其余代码全平台可移植。
 - 不要 discard 桌面端当前正打开的对话；对运行中会话的删除是尽力而为。
   `zcode_session_discard` 不可恢复，务必先跑预演。
-
-## 技能（Skills）
-
-开箱即用的技能文档在 [`skills/`](skills/)，按需拷进客户端的 skills 目录
-（例如 Codex 放 `~/.codex/skills/`）：
-
-- **[`zcode-mcp`](skills/zcode-mcp/SKILL.md)** — 总纲：工具、核心概念、
-  选型指南。
-- **[`zcode-subagent`](skills/zcode-subagent/SKILL.md)** — 分册：把 ZCode
-  当 subagent 工人编排——派发模式、验收闭环、权限闸门、生命周期卫生。
 
 ## 许可证
 
