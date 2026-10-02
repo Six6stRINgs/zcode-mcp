@@ -61,6 +61,17 @@ nothing to install by hand. (Once the package is on PyPI this shortens to
 `uvx zcode-mcp`; `pip install -e .` with the bundled `zcode-mcp` entry point
 also works.)
 
+**ZCode CLI path (`zcode.cjs`)** — the bridge drives ZCode through its CLI
+entry, normally at `<ZCode install dir>/resources/glm/zcode.cjs`. It is
+auto-detected from the common install locations (`%LOCALAPPDATA%/Programs/ZCode`,
+`C:/Program Files/ZCode`, …). If your ZCode lives somewhere else, point the
+`ZCODE_CJS` environment variable at it — either globally, or per-server in
+the MCP registration:
+
+```bash
+codex mcp add zcode-mcp --env ZCODE_CJS="D:/Tools/ZCode/resources/glm/zcode.cjs" -- uvx --from "<path-to>/zcode-mcp" zcode-mcp
+```
+
 Headless `codex exec` rejects MCP tool calls under its default approval
 policy. For automation use `--dangerously-bypass-approvals-and-sandbox`
 (after reviewing what your agents can reach) or `--approve-for-me`;

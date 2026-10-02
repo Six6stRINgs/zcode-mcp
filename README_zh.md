@@ -53,6 +53,16 @@ codex mcp add zcode-mcp -- uvx --from "<路径>/zcode-mcp" zcode-mcp
 （发布到 PyPI 之后可简化为 `uvx zcode-mcp`；`pip install -e .` +
 `zcode-mcp` 命令入口同样可用。）
 
+**ZCode CLI 路径（`zcode.cjs`）**——桥通过 ZCode 的 CLI 入口驱动它，通常
+位于 `<ZCode 安装目录>/resources/glm/zcode.cjs`。会自动扫描常见安装位置
+（`%LOCALAPPDATA%/Programs/ZCode`、`C:/Program Files/ZCode` 等）。如果你的
+ZCode 装在别处，把 `ZCODE_CJS` 环境变量指向它——可以设为全局，也可以只在
+MCP 注册时指定：
+
+```bash
+codex mcp add zcode-mcp --env ZCODE_CJS="D:/Tools/ZCode/resources/glm/zcode.cjs" -- uvx --from "<路径>/zcode-mcp" zcode-mcp
+```
+
 无头 `codex exec` 在默认审批策略下会拒绝 MCP 工具调用。自动化场景请用
 `--dangerously-bypass-approvals-and-sandbox`（先想清楚你的 agent 能碰到
 什么）或 `--approve-for-me`；交互式 Codex 首次调用弹一次审批框即可。
