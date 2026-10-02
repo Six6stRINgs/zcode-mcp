@@ -2,17 +2,13 @@
 
 [English](README.md) | 中文
 
-**让任何 MCP 客户端**（Codex CLI、Claude Code、Cursor、你自己的 agent）
-**像人一样操作 [ZCode](https://zcode.z.ai)**——智谱 Z.AI 的 agentic coding
-应用：新建对话、多轮续聊、带文件/图片附件、轮询查看模型已输出的内容
-（准实时）、中途切换模型、收割最终回复。
+用任何 MCP 客户端（Codex CLI、Claude Code、Cursor、你自己的 agent）驱动
+[ZCode](https://zcode.z.ai)——智谱 Z.AI 的 agentic coding 应用。
 
-zcode-mcp 基于 ZCode 官方的 **app-server 协议**（桌面 App 同款通路），
-桥创建的每一个对话都是真实对话：桌面端可见、可续聊、直接编辑你项目里的
-真实文件。
-
-纯 Python 标准库——唯一的可选依赖是 `cryptography`，且仅在需要查看套餐
-额度时使用。
+zcode-mcp 负责新建 ZCode 对话、多轮续聊、中途切换模型，并能在模型还在
+输出时就读到它的部分产物。它说的是 ZCode 官方的 **app-server 协议**——
+与桌面 App 同一条通路——所以这里创建的每一个对话都是真实对话：桌面端
+可见、可续聊、直接编辑你项目里的真实文件。
 
 ```
 MCP 客户端 (Codex / Claude / 你的 agent)         ZCode 桌面端
@@ -21,53 +17,73 @@ MCP 客户端 (Codex / Claude / 你的 agent)         ZCode 桌面端
 zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server（桥拉起）
 ```
 
+纯 Python 标准库——唯一的可选依赖是 `cryptography`，且仅查看套餐额度时
+需要。
+
 ## 特色
 
 - **多轮对话** — 持有 session id 持续续聊，随时纠正方向。
-- **中途可观测** — turn 运行中可轮询状态、查看模型迄今已写的内容（桥
-  实时累积增量，你调用时读取）；wait 超时会标注 turn 此刻是流式输出、
-  思考还是卡住。
-- **交互式权限** — 非 yolo 模式可用：ZCode 请求审批时，编排方 agent 查看待
-  决请求、做出决策，turn 恢复。
+- **中途可观测** — turn 运行中可轮询状态、读取模型已输出的内容；wait
+  超时会标注 turn 此刻是流式输出、思考还是卡住。
+- **交互式权限** — 非 yolo 模式全链路可用：ZCode 请求审批时，编排方 agent
+  看到待决请求、做出决策，turn 随即恢复。
 - **模型选择与额度** — 对话级按名称（`CPA/gpt-5.6-luna`）或 id 指定任意
-  可寻址模型，可中途切换；一次调用查看全部套餐额度窗口。
-- **生命周期管理** — 项目级对话、用完即焚的一次性对话（`temporary`，适合
-  subagent 派工，无需手动清理）、归档/恢复、带预演保护的彻底删除。
+  可寻址模型，可中途切换；一次调用读取全部套餐额度窗口。
+- **Subagent 生命周期** — 项目级工人 + 用完即焚的临时对话
+  （`temporary: true`，无需手动清理），另有归档/恢复与带预演保护的彻底删除。
 - **原生附件** — 文件/图片走 ZCode 自己的附件管线，与桌面端拖拽同款。
 - **桌面互通** — 会话存于共享存储，桌面端可列出、可续聊这里创建的一切。
 
-## 环境要求与安装
+## 技能（Skills）
 
-**环境要求**
+仓库自带三份现成的技能文档，供读取 `SKILL.md` 的客户端使用（Codex 在
+内）：
+
+- **zcode-mcp** — 总纲：完整工具面、核心概念（会话生命周期、模型选择、
+  权限流程）与选型指南。
+- **zcode-subagent** — 把 ZCode 当 subagent 工人编排：派工模式、验收
+  循环、生命周期 hygiene。
+- **zcode-code-reviewer** — 只读代码评审。
+
+Codex 的安装方式是把技能文件夹复制进 Codex 的 skills 目录：
+
+```bash
+# macOS / Linux
+cp -r skills/* ~/.codex/skills/
+```
+
+```powershell
+# Windows（PowerShell）
+Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills\
+```
+
+## 环境要求与安装
 
 - Python ≥ 3.9（纯标准库；`cryptography` 可选，仅 `zcode_quota` 需要）
 - Node.js（用 ZCode 桌面端自带的即可）
 - [ZCode](https://zcode.z.ai) 桌面端 / CLI 0.16.x，已登录
 
-**获取代码并注册到 Codex CLI**
-
-一条命令，直接连本仓库——不用克隆、不用安装：
+注册到 Codex CLI——一条命令，直连本仓库，无需克隆、无需手动安装：
 
 ```bash
 codex mcp add zcode-mcp -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp
 ```
 
-`uvx` 会拉取仓库、按 `pyproject.toml` 自动构建隔离环境并暴露
-`zcode-mcp` 入口。要固定版本，在 git URL 后追加 `@<tag>`。
+`uvx` 会拉取仓库、按 `pyproject.toml` 自动构建隔离环境并暴露 `zcode-mcp`
+入口。要固定版本，在 git URL 后追加 `@<tag>`。
 
 **ZCode CLI 路径（`zcode.cjs`）**——桥通过 ZCode 的 CLI 入口驱动它，通常
-位于 `<ZCode 安装目录>/resources/glm/zcode.cjs`。会自动扫描常见安装位置
-（`%LOCALAPPDATA%/Programs/ZCode`、`C:/Program Files/ZCode` 等）。如果你的
-ZCode 装在别处，把 `ZCODE_CJS` 环境变量指向它——可以设为全局，也可以只在
+位于 `<ZCode 安装目录>/resources/glm/zcode.cjs`，会自动扫描常见安装位置
+（`%LOCALAPPDATA%/Programs/ZCode`、`C:/Program Files/ZCode` 等）。如果
+ZCode 装在别处，把 `ZCODE_CJS` 环境变量指向它——设为全局变量，或仅在
 MCP 注册时指定：
 
 ```bash
 codex mcp add zcode-mcp --env ZCODE_CJS="<安装目录>/resources/glm/zcode.cjs" -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp
 ```
 
-Windows 下也可以在**系统环境变量**里新建 `ZCODE_CJS`，值为 `zcode.cjs`
-所在目录（如 `… esources\glm`）（设置 → 系统 → 关于 → 高级系统设置 →
-环境变量），不必每个 MCP 注册单独配置——桥两种来源都认。
+Windows 下也可以新建**系统环境变量** `ZCODE_CJS`，值为 `zcode.cjs` 所在
+目录（设置 → 系统 → 关于 → 高级系统设置 → 环境变量）；桥两种来源都认。
 
 无头 `codex exec` 在默认审批策略下会拒绝 MCP 工具调用。自动化场景请用
 `--dangerously-bypass-approvals-and-sandbox`（先想清楚你的 agent 能碰到
@@ -76,34 +92,19 @@ Windows 下也可以在**系统环境变量**里新建 `ZCODE_CJS`，值为 `zco
 **其他 MCP 客户端**（Claude Code、Cursor 等）：把同一条命令注册为 stdio
 MCP server。
 
-## 技能（Skills）
-
-本仓库自带现成的技能文档（供 Codex 等读取 `SKILL.md` 文件的客户端使用）：
-`zcode-mcp`（总纲：工具、核心概念、选型指南）、`zcode-subagent`（把 ZCode
-当 subagent 工人编排）、`zcode-code-reviewer`（只读代码评审）。
-
-Codex 的安装方式是把技能文件夹复制进 Codex 的 skills 目录：
-
-```bash
-# macOS / Linux
-cp -r skills/* ~/.codex/skills/
-
-# Windows（PowerShell）
-Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
-
 ## 工具
 
-按设计分为两个家族：
+按设计分为两个家族。
 
-**独立工具** —— 不需要任何对话：
+**独立工具**——不需要任何对话：
 
-| 工具             | 作用                                                                                                      |
-| ---------------- | --------------------------------------------------------------------------------------------------------- |
+| 工具             | 作用                                                                                                               |
+| ---------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `zcode_models` | 全部会话可寻址模型，带 provider 显示名（`CPA/gpt-5.6-luna`）、reasoning 档位与上下文窗口；同时单列桌面账号型来源 |
-| `zcode_quota`  | 一次调用返回全部套餐额度：GLM Coding Plan 窗口 + Start Plan token 余额                                    |
-| `zcode_health` | 桥 / Node.js / ZCode CLI / app-server 健康检查（不建会话）                                                |
+| `zcode_quota`  | 一次调用返回全部套餐额度：GLM Coding Plan 窗口 + Start Plan token 余额                                             |
+| `zcode_health` | 桥 / Node.js / ZCode CLI / app-server 健康检查（不建会话）                                                         |
 
-**会话工具** —— 全部携带 `session_id`：
+**会话工具**——全部携带 `session_id`：
 
 | 工具                          | 作用                                                      |
 | ----------------------------- | --------------------------------------------------------- |
@@ -126,19 +127,19 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 
 #### `zcode_session_new`
 
-| 参数                 | 类型     | 默认值                         | 说明                                                                                                                          |
-| -------------------- | -------- | ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------- |
-| `text`             | string   | **必填**                 | 要发送的首条消息。                                                                                                            |
-| `project`          | string   | —                             | 已存在项目目录的绝对路径；对话变为项目级，修改直接落到该仓库。优先于`cwd`。                                                 |
-| `cwd`              | string   | `$ZCODE_MCP_WORKSPACE`       | 工作区目录（给了`project` 时被忽略）。                                                                                      |
-| `model`            | string   | `bigmodel-api/GLM-5.3-Flash` | 选择器：`providerId/modelId`、`ProviderName/modelId`（如 `CPA/gpt-5.6-luna`），可追加 `$reasoningLevel`。未给档位时优先 `high`。见 `zcode_models`。                    |
-| `mode`             | enum     | `yolo`                       | `plan` / `build` / `edit` / `yolo` / `auto`。非 yolo 模式会因审批暂停。                                             |
-| `temporary`        | boolean  | `false`                      | 用完即焚的 subagent 对话——闲置 `ZCODE_MCP_TEMP_TTL`（默认 600s）后或桥退出时自动彻底删除。可与`project` 组合。                                                 |
-| `files`            | string[] | —                             | 附件绝对路径。                                                                                                                |
-| `attachments`      | object[] | —                             | 原生 ZCode 附件对象（高级透传）。                                                                                             |
-| `title_generation` | boolean  | `false`                      | 让 ZCode 自动生成对话标题。                                                                                                   |
-| `wait`             | boolean  | `true`                       | 阻塞到 turn 结束。                                                                                                            |
-| `timeout_sec`      | integer  | `600`                        | 阻塞最长等待秒数；受`ZCODE_MCP_TOOL_BUDGET`（默认 240）约束。到点后 turn 继续运行——再次调用 `zcode_session_wait` 续等。 |
+| 参数                 | 类型     | 默认值                         | 说明                                                                                                                                                            |
+| -------------------- | -------- | ------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `text`             | string   | **必填**                 | 要发送的首条消息。                                                                                                                                              |
+| `project`          | string   | —                             | 已存在项目目录的绝对路径；对话变为项目级，修改直接落到该仓库。优先于`cwd`。                                                                                   |
+| `cwd`              | string   | `$ZCODE_MCP_WORKSPACE`       | 工作区目录（给了`project` 时被忽略）。                                                                                                                        |
+| `model`            | string   | `bigmodel-api/GLM-5.3-Flash` | 选择器：`providerId/modelId`、`ProviderName/modelId`（如 `CPA/gpt-5.6-luna`），可追加 `$reasoningLevel`。未给档位时优先 `high`。见 `zcode_models`。 |
+| `mode`             | enum     | `yolo`                       | `plan` / `build` / `edit` / `yolo` / `auto`。非 yolo 模式会因审批暂停。                                                                               |
+| `temporary`        | boolean  | `false`                      | 用完即焚的 subagent 对话——闲置`ZCODE_MCP_TEMP_TTL`（默认 600s）后或桥退出时自动彻底删除。可与 `project` 组合。                                            |
+| `files`            | string[] | —                             | 附件绝对路径。                                                                                                                                                  |
+| `attachments`      | object[] | —                             | 原生 ZCode 附件对象（高级透传）。                                                                                                                               |
+| `title_generation` | boolean  | `false`                      | 让 ZCode 自动生成对话标题。                                                                                                                                     |
+| `wait`             | boolean  | `true`                       | 阻塞到 turn 结束。                                                                                                                                              |
+| `timeout_sec`      | integer  | `600`                        | 阻塞最长等待秒数；受`ZCODE_MCP_TOOL_BUDGET`（默认 240）约束。到点后 turn 继续运行——再次调用 `zcode_session_wait` 续等。                                   |
 
 #### `zcode_session_send`
 
@@ -202,9 +203,9 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 
 #### `zcode_session_set_model`
 
-| 参数           | 类型   | 默认值         | 说明                                                              |
-| -------------- | ------ | -------------- | ----------------------------------------------------------------- |
-| `session_id` | string | **必填** | 目标对话。                                                        |
+| 参数           | 类型   | 默认值         | 说明                                                                             |
+| -------------- | ------ | -------------- | -------------------------------------------------------------------------------- |
+| `session_id` | string | **必填** | 目标对话。                                                                       |
 | `model`      | string | **必填** | `providerId/modelId`、`ProviderName/modelId`，或二者加 `$reasoningLevel`。 |
 
 #### `zcode_session_permissions`
@@ -250,22 +251,22 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 
 ## 配置（环境变量）
 
-| 变量                        | 默认值                                | 说明                                                                                                              |
-| --------------------------- | ------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
-| `ZCODE_CJS`               | 自动探测                              | ZCode CLI 入口路径（`<安装目录>/resources/glm/zcode.cjs`）；未设置时自动扫描常见安装位置。                      |
-| `ZCODE_MCP_WORKSPACE`     | `<仓库>/sandbox`                    | `zcode_session_new` 的默认工作区。                                                                              |
-| `ZCODE_MCP_DEFAULT_MODEL` | `bigmodel-api/GLM-5.3-Flash`        | `zcode_session_new` 未指定 `model` 时使用的模型。                                                             |
-| `ZCODE_MCP_TOOL_BUDGET`   | `240`                               | 单次阻塞工具调用的时间上限（秒）。Codex 等 MCP 客户端会在 ~300s 掐断 tools/call；桥在此之前返回可续等的 timeout。 |
-| `ZCODE_MCP_DEBUG`         | 关                                    | 详细协议日志（`bridge.log`、`child_dump.log`）。                                                              |
-| `ZCODE_MCP_NO_WARMUP`     | 关                                    | 跳过 initialize 时的 app-server 预热。                                                                            |
-| `ZCODE_HOME`              | `~/.zcode`                          | ZCode 共享存储根目录。                                                                                            |
-| `ZCODE_MCP_SESSION_DB`    | `$ZCODE_HOME/cli/db/db.sqlite`      | 覆盖会话库路径。                                                                                                  |
-| `ZCODE_MCP_TASKS_INDEX`   | `$ZCODE_HOME/v2/tasks-index.sqlite` | 覆盖任务索引路径。                                                                                                |
-| `ZCODE_MCP_CREDENTIALS`   | `$ZCODE_HOME/v2/credentials.json`   | 覆盖 OAuth 凭据存储路径（额度）。                                                                                 |
-| `ZCODE_MCP_ZCODE_CONFIG`  | `$ZCODE_HOME/v2/config.json`        | 覆盖 provider 配置路径（Start Plan 余额）。                                                                       |
+| 变量                          | 默认值                                  | 说明                                                                                                              |
+| ----------------------------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `ZCODE_CJS`                 | 自动探测                                | ZCode CLI 入口路径（`<安装目录>/resources/glm/zcode.cjs`）；未设置时自动扫描常见安装位置。                      |
+| `ZCODE_MCP_WORKSPACE`       | `<仓库>/sandbox`                      | `zcode_session_new` 的默认工作区。                                                                              |
+| `ZCODE_MCP_DEFAULT_MODEL`   | `bigmodel-api/GLM-5.3-Flash`          | `zcode_session_new` 未指定 `model` 时使用的模型。                                                             |
+| `ZCODE_MCP_TOOL_BUDGET`     | `240`                                 | 单次阻塞工具调用的时间上限（秒）。Codex 等 MCP 客户端会在 ~300s 掐断 tools/call；桥在此之前返回可续等的 timeout。 |
+| `ZCODE_MCP_TEMP_TTL`        | `600`                                 | `temporary: true` 对话闲置多少秒后自动彻底删除（运行中的 turn 不会被回收）；`0` 关闭闲置回收。                |
+| `ZCODE_MCP_DEBUG`           | 关                                      | 详细协议日志（`bridge.log`、`child_dump.log`）。                                                              |
+| `ZCODE_MCP_NO_WARMUP`       | 关                                      | 跳过 initialize 时的 app-server 预热。                                                                            |
+| `ZCODE_HOME`                | `~/.zcode`                            | ZCode 共享存储根目录。                                                                                            |
+| `ZCODE_MCP_SESSION_DB`      | `$ZCODE_HOME/cli/db/db.sqlite`        | 覆盖会话库路径。                                                                                                  |
+| `ZCODE_MCP_TASKS_INDEX`     | `$ZCODE_HOME/v2/tasks-index.sqlite`   | 覆盖任务索引路径。                                                                                                |
+| `ZCODE_MCP_CREDENTIALS`     | `$ZCODE_HOME/v2/credentials.json`     | 覆盖 OAuth 凭据存储路径（额度）。                                                                                 |
+| `ZCODE_MCP_ZCODE_CONFIG`    | `$ZCODE_HOME/v2/config.json`          | 覆盖 provider 配置路径（Start Plan 余额）。                                                                       |
 | `ZCODE_MCP_PROVIDER_CONFIG` | `$ZCODE_HOME/v2/provider_config.json` | 覆盖 app-server provider 注册表路径（模型显示名与桌面专属来源）。                                                 |
-| `ZCODE_MCP_TEMP_TTL`      | `600`                               | `temporary: true` 对话闲置多少秒后自动彻底删除（运行中的 turn 不会被回收）；`0` 关闭闲置回收。                                     |
-| `ZCODE_MCP_APP_VERSION`   | `3.14.4`                            | 套餐额度端点携带的`app_version`。                                                                               |
+| `ZCODE_MCP_APP_VERSION`     | `3.14.4`                              | 套餐额度端点携带的`app_version`。                                                                               |
 
 ## 工作原理
 
@@ -303,4 +304,3 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 ## 许可证
 
 MIT
-```
