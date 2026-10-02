@@ -240,21 +240,6 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
 
 无参数。
 
-## 技能（Skills）
-
-本仓库自带现成的技能文档（供 Codex 等读取 `SKILL.md` 文件的客户端使用）：
-`zcode-mcp`（总纲：工具、核心概念、选型指南）、`zcode-subagent`（把 ZCode
-当 subagent 工人编排）、`zcode-code-reviewer`（只读代码评审）。
-
-Codex 的安装方式是把技能文件夹复制进 Codex 的 skills 目录：
-
-```bash
-# macOS / Linux
-cp -r skills/* ~/.codex/skills/
-
-# Windows（PowerShell）
-Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills```
-
 ## 配置（环境变量）
 
 | 变量                        | 默认值                                | 说明                                                                                                              |
