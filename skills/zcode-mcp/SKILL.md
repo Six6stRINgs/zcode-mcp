@@ -103,8 +103,10 @@ contents into `text`.
   that provider — resolution uses the full cached catalogue, so
   cross-provider switches keep working.
 - Desktop-only sources (Start Plan, BigModel 个人) cannot be set from here —
-  selecting one by name returns guidance; use the ZCode desktop picker or
-  add the plan as a custom provider to make it addressable.
+  selecting one by name returns guidance. Their quota is desktop-only: these
+  account sources never enter the registry bridge sessions address. Plain
+  API-key endpoints are a different matter — added as custom providers they
+  show up in `zcode_models` and work normally.
 - `zcode_quota {}` — plan windows (used / remaining / percentage / next
   reset). Needs the optional `cryptography` package. Check before long
   tasks; if a provider's credentials are cooling down, switch models.

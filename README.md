@@ -312,6 +312,15 @@ reference during development; it is not part of the package.
 
 ## Known limitations
 
+- **Start Plan and other desktop account quotas cannot be spent from MCP
+  sessions.** Account-backed model sources (Start Plan, BigModel 个人, Z.ai)
+  never enter the provider registry that headless sessions address, so their
+  quota can only be consumed in the desktop app's own conversations —
+  regardless of remaining balance. `zcode_models` lists them for reference
+  and returns guidance when one is selected. Sources backed by a plain API
+  key are different: add them as custom providers and they become fully
+  usable here (that is how the `bigmodel-api` channel in the examples
+  exists).
 - Requires a local ZCode install; the app-server protocol is unofficial and
   may change between ZCode versions (tested against 0.16.9 / desktop 3.14.4).
 - Preset official plugin MCPs (e.g. web search) start without desktop
