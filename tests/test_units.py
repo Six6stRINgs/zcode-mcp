@@ -160,6 +160,22 @@ class SessionMonitorTest(unittest.TestCase):
         mon.feed(event("state.updated", patch={"status": "running"}))
         self.assertEqual(mon.last_status, "running")
 
+    def test_activity_phases(self):
+        mon = SessionMonitor()
+        mon.feed(event("turn.started", turnId="t1"))
+        # producing: turn started, no deltas yet
+        self.assertEqual(mon.activity()["phase"], "producing")
+        # streaming: a recent text delta
+        mon.feed(event("model.streaming", assistantMessageId="m1", delta="hi", kind="text_delta"))
+        act = mon.activity()
+        self.assertEqual(act["phase"], "streaming")
+        self.assertEqual(act["stream_chars"], 2)
+        # stalled: quiet for long (rewind both the event and stream clocks)
+        ts, t, pl = mon.events[-1]
+        mon.events[-1] = (ts - 60, t, pl)
+        mon.last_stream_at = mon.last_stream_at - 60
+        self.assertEqual(mon.activity()["phase"], "stalled")
+
     def test_events_without_payload_are_tolerated(self):
         mon = SessionMonitor()
         mon.feed({"type": "session.updated", "payload": None})
