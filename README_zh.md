@@ -27,7 +27,7 @@ zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server（桥拉
   超时会标注 turn 此刻是流式输出、思考还是卡住。
 - **交互式权限** — 非 yolo 模式全链路可用：ZCode 请求审批时，编排方 agent
   看到待决请求、做出决策，turn 随即恢复。
-- **模型选择与额度** — 对话级按名称（`CPA/gpt-5.6-luna`）或 id 指定任意
+- **模型选择与额度** — 对话级按名称或 id 指定任意
   可寻址模型，可中途切换；一次调用读取全部套餐额度窗口。
 - **Subagent 生命周期** — 项目级工人 + 用完即焚的临时对话
   （`temporary: true`，无需手动清理），另有归档/恢复与带预演保护的彻底删除。

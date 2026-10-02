@@ -33,7 +33,7 @@ Pure Python standard library — the only optional dependency is
   asks for approval, the orchestrating agent sees the request, decides, and
   the turn resumes.
 - **Model selection & quota** — pick any session-addressable model per
-  conversation by name (`CPA/gpt-5.6-luna`) or id, switch mid-flight, and
+  conversation by name or id, switch mid-flight, and
   read every plan-quota window in one call.
 - **Subagent lifecycle** — project-scoped workers and self-cleaning
   temporary conversations (`temporary: true`), plus archive/unarchive and
