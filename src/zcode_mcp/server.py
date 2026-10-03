@@ -50,10 +50,11 @@ def _dispatch_tool(req_id: Any, params: dict) -> None:
             {"content": [{"type": "text", "text": f"unknown tool: {name}"}], "isError": True},
         )
     else:
+        sid = targs.get("session_id")
+        if sid:
+            ephemeral.touch(sid)
+            ephemeral.begin(sid)
         try:
-            sid = targs.get("session_id")
-            if sid:
-                ephemeral.touch(sid)
             resp = mcp_result(req_id, {"content": [{"type": "text", "text": impl(targs)}]})
         except Exception as e:
             log(f"tool {name} failed: {e!r}")
@@ -64,6 +65,9 @@ def _dispatch_tool(req_id: Any, params: dict) -> None:
                     "isError": True,
                 },
             )
+        finally:
+            if sid:
+                ephemeral.end(sid)
     out = json.dumps(resp, ensure_ascii=False)
     log(f"MCP -> {out[:200]}")
     with _stdout_lock:

@@ -316,6 +316,15 @@ class ProviderAliasTest(unittest.TestCase):
         sel = parse_model_selector("some-unknown/x", self.AVAILABLE)
         self.assertEqual(sel["providerId"], "some-unknown")
 
+    def test_empty_catalogue_passthrough(self):
+        # catalogue probe failed: ids must pass through so the app-server
+        # validates (the default-model path depends on this)
+        from zcode_mcp.models import build_provider_aliases, parse_model_selector
+
+        aliases = build_provider_aliases([], self.REGISTRY)
+        sel = parse_model_selector("bigmodel-api/GLM-5.3-Flash", [], aliases)
+        self.assertEqual(sel["providerId"], "bigmodel-api")
+
 
 class EphemeralTest(unittest.TestCase):
     """Temporary-conversation registry and reaper decisions."""
@@ -326,10 +335,12 @@ class EphemeralTest(unittest.TestCase):
         self.eph = importlib.import_module("zcode_mcp.ephemeral")
         with self.eph._lock:
             self.eph._sessions.clear()
+            self.eph._inflight.clear()
 
     def tearDown(self):
         with self.eph._lock:
             self.eph._sessions.clear()
+            self.eph._inflight.clear()
 
     def test_register_touch_note(self):
         self.eph.register("sess_t1")
@@ -337,6 +348,12 @@ class EphemeralTest(unittest.TestCase):
         self.assertIn("temporary conversation", self.eph.note("sess_t1"))
         self.eph.touch("sess_t1")
         self.assertTrue(self.eph.is_temporary("sess_t1"))
+
+    def test_forget_drops_session(self):
+        self.eph.register("sess_t1")
+        self.eph.forget("sess_t1")
+        self.assertFalse(self.eph.is_temporary("sess_t1"))
+        self.assertEqual(self.eph.note("sess_t1"), "")
 
     def test_reap_one_guards_running_turn_then_discards(self):
         import zcode_mcp.store as store
@@ -347,6 +364,8 @@ class EphemeralTest(unittest.TestCase):
         store.discard_session = lambda sid: calls.append(sid) or {"session": 1}
         try:
             self.eph.register("sess_t1")
+            with self.eph._lock:
+                self.eph._sessions["sess_t1"] -= 10**6  # well past TTL
             self.eph._turn_running = lambda sid: True
             self.assertFalse(self.eph._reap_one("sess_t1"))  # turn moving: keep
             self.assertTrue(self.eph.is_temporary("sess_t1"))
@@ -358,10 +377,59 @@ class EphemeralTest(unittest.TestCase):
             store.discard_session = orig_discard
             self.eph._turn_running = orig_running
 
+    def test_inflight_call_blocks_reaping(self):
+        import zcode_mcp.store as store
+
+        calls = []
+        orig_discard = store.discard_session
+        orig_running = self.eph._turn_running
+        store.discard_session = lambda sid: calls.append(sid) or {"session": 1}
+        self.eph._turn_running = lambda sid: False
+        try:
+            self.eph.register("sess_busy")
+            with self.eph._lock:
+                self.eph._sessions["sess_busy"] -= 10**6
+            self.eph.begin("sess_busy")
+            self.assertFalse(self.eph._reap_one("sess_busy"))  # call executing
+            self.eph.end("sess_busy")
+            self.assertTrue(self.eph._reap_one("sess_busy"))
+            self.assertEqual(calls, ["sess_busy"])
+        finally:
+            store.discard_session = orig_discard
+            self.eph._turn_running = orig_running
+
+    def test_reap_one_skips_fresh_sessions(self):
+        # TOCTOU guard: a touch after the cycle snapshot resets the clock
+        orig_running = self.eph._turn_running
+        self.eph._turn_running = lambda sid: False
+        try:
+            self.eph.register("sess_fresh")
+            with self.eph._lock:
+                self.eph._sessions["sess_fresh"] -= 10**6
+            self.eph.touch("sess_fresh")  # lands after the snapshot
+            self.assertFalse(self.eph._reap_one("sess_fresh"))
+            self.assertTrue(self.eph.is_temporary("sess_fresh"))
+        finally:
+            self.eph._turn_running = orig_running
+
+    def test_turn_running_fail_closed(self):
+        # live monitor semantics: no events -> assume live; running turn
+        # (even stalled) -> live; completed turn -> not live
+        from zcode_mcp.appserver import SERVER
+
+        sid = "sess_eph_turn"
+        mon = SERVER._monitor(sid)
+        self.assertTrue(self.eph._turn_running(sid))  # never observed
+        mon.feed({"type": "turn.started", "payload": {}, "sessionId": sid, "seq": 0})
+        self.assertTrue(self.eph._turn_running(sid))  # running (stalled counts)
+        mon.feed({"type": "turn.completed", "payload": {}, "sessionId": sid, "seq": 1})
+        self.assertFalse(self.eph._turn_running(sid))  # saw it end
+        SERVER.monitors.pop(sid, None)
+
     def test_exit_discard_forces_and_forgets(self):
         reaped = []
 
-        def fake_reap(sid, force=False):
+        def fake_reap(sid, force=False, ttl=None):
             reaped.append((sid, force))
             with self.eph._lock:
                 self.eph._sessions.pop(sid, None)
@@ -384,10 +452,56 @@ class EphemeralTest(unittest.TestCase):
 
         self.eph.register("sess_old")
         self.eph.register("sess_new")
-        with self.eph._lock:
-            self.eph._sessions["sess_old"] -= config.TEMP_TTL + 60
-        due = self.eph._due_sids(time.monotonic(), config.TEMP_TTL)
-        self.assertEqual(sorted(due), ["sess_old"])
+        # defuse the background reaper: it must never touch the real store
+        orig = self.eph._reap_one
+        self.eph._reap_one = lambda sid, force=False, ttl=None: False
+        try:
+            with self.eph._lock:
+                self.eph._sessions["sess_old"] -= config.TEMP_TTL + 60
+            due = self.eph._due_sids(time.monotonic(), config.TEMP_TTL)
+            self.assertEqual(sorted(due), ["sess_old"])
+        finally:
+            self.eph._reap_one = orig
+
+    def test_reap_cycle_end_to_end(self):
+        import zcode_mcp.store as store
+
+        calls = []
+        orig_discard = store.discard_session
+        orig_running = self.eph._turn_running
+        store.discard_session = lambda sid: calls.append(sid) or {"session": 1}
+        self.eph._turn_running = lambda sid: False
+        try:
+            self.eph.register("sess_due")
+            with self.eph._lock:
+                self.eph._sessions["sess_due"] -= 10**6
+            self.assertEqual(self.eph._reap_cycle(ttl=600), 1)
+            self.assertEqual(calls, ["sess_due"])
+            self.assertFalse(self.eph.is_temporary("sess_due"))
+        finally:
+            store.discard_session = orig_discard
+            self.eph._turn_running = orig_running
+
+    def test_discard_failure_keeps_session_for_retry(self):
+        import zcode_mcp.store as store
+
+        orig_discard = store.discard_session
+        orig_running = self.eph._turn_running
+
+        def boom(sid):
+            raise RuntimeError("database is locked")
+
+        store.discard_session = boom
+        self.eph._turn_running = lambda sid: False
+        try:
+            self.eph.register("sess_locked")
+            with self.eph._lock:
+                self.eph._sessions["sess_locked"] -= 10**6
+            self.assertFalse(self.eph._reap_one("sess_locked"))
+            self.assertTrue(self.eph.is_temporary("sess_locked"))  # retried later
+        finally:
+            store.discard_session = orig_discard
+            self.eph._turn_running = orig_running
 
     def test_reap_cycle_disabled_when_ttl_zero(self):
         self.eph.register("sess_t2")

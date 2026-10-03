@@ -92,8 +92,8 @@ def provider_registry() -> dict[str, dict]:
                 "enabled": True,
                 "models": list((r.get("config") or {}).get("personalModelIds") or []),
             }
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError, AttributeError, TypeError) as e:
+        log(f"provider registry: {PROVIDER_CONFIG_PATH} unreadable ({e!r})")
     try:
         with open(ZCODE_V2_CONFIG, encoding="utf-8") as f:
             cfg = json.load(f)
@@ -106,8 +106,8 @@ def provider_registry() -> dict[str, dict]:
                 "enabled": bool(p.get("enabled", True)),
                 "models": list((p.get("models") or {}).keys()),
             }
-    except (OSError, ValueError):
-        pass
+    except (OSError, ValueError, AttributeError, TypeError) as e:
+        log(f"provider registry: {ZCODE_V2_CONFIG} unreadable ({e!r})")
     return reg
 
 
@@ -172,8 +172,10 @@ def _resolve_provider(
     hit = lowered.get(provider_id.lower())
     if hit:
         return hit
-    if not aliases:
-        return provider_id  # legacy passthrough: let the app-server validate
+    if not aliases or not ids:
+        # no aliases, or the catalogue is unknown (probe failed): pass the
+        # id through and let the app-server validate authoritatively
+        return provider_id
     candidates = aliases.get(_norm_key(provider_id)) or []
     if len(candidates) > 1:
         # a registry name shared by several providers resolves to the one

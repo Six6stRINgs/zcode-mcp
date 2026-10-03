@@ -7,6 +7,16 @@ discarded when the bridge process exits. The bridge owns this cleanup
 because deferred persistence only protects EMPTY drafts — a temporary
 session that exchanged messages lands in the shared store like any other
 and would otherwise pollute the desktop sidebar.
+
+Safety rules, in order of importance:
+- a session with a tool call currently executing on it (``begin``/``end``)
+  is never reaped, so "actively orchestrated workers are never reaped
+  mid-flight" is enforced, not just intended;
+- a turn is only considered finished when the monitor saw it end; a
+  session whose events were never observed (subscribe failed, bridge
+  restarted) is treated as live and left to the exit discard;
+- the runtime session is stopped and closed before the store rows go, so
+  the app-server cannot resurrect rows after the DELETE.
 """
 
 from __future__ import annotations
@@ -20,6 +30,7 @@ from .config import log
 
 _lock = threading.Lock()
 _sessions: dict[str, float] = {}  # sid -> last-touch monotonic timestamp
+_inflight: dict[str, int] = {}  # sid -> tool calls currently executing
 _exit_hook_installed = False
 
 
@@ -42,6 +53,32 @@ def touch(sid: str) -> None:
             _sessions[sid] = time.monotonic()
 
 
+def begin(sid: str) -> None:
+    """Mark one tool call as executing on the session; the reaper defers."""
+    with _lock:
+        if sid in _sessions:
+            _inflight[sid] = _inflight.get(sid, 0) + 1
+
+
+def end(sid: str) -> None:
+    """Release one in-flight mark taken by :func:`begin`."""
+    with _lock:
+        n = _inflight.get(sid)
+        if n is None:
+            return
+        if n <= 1:
+            del _inflight[sid]
+        else:
+            _inflight[sid] = n - 1
+
+
+def forget(sid: str) -> None:
+    """Drop the session from the registry (manual discard path)."""
+    with _lock:
+        _sessions.pop(sid, None)
+        _inflight.pop(sid, None)
+
+
 def is_temporary(sid: str) -> bool:
     with _lock:
         return sid in _sessions
@@ -58,26 +95,68 @@ def note(sid: str) -> str:
 
 
 def _turn_running(sid: str) -> bool:
+    """Whether a turn may still be live. Fails closed: a session whose
+    events were never observed (subscribe failed) counts as live, and a
+    ``running`` turn state counts as live even when the phase looks
+    ``stalled`` (model-retry windows report exactly that)."""
     from .appserver import SERVER
 
     try:
-        return SERVER._monitor(sid).activity()["phase"] in ("streaming", "producing")
+        mon = SERVER._monitor(sid)
+        if not mon.events:
+            return True  # never observed: assume live
+        return mon.turn_state == "running"
     except Exception:
-        return False
+        return True
 
 
-def _reap_one(sid: str, force: bool = False) -> bool:
-    from .store import discard_session
+def _end_runtime_session(sid: str) -> None:
+    """Best-effort: stop the turn and close the runtime session so the
+    app-server holds nothing that could resurrect rows after the DELETE."""
+    try:
+        from .protocol import stop_session
 
+        stop_session(sid)
+    except Exception:
+        pass
+    try:
+        from .appserver import SERVER
+
+        SERVER.request("session/close", {"sessionId": sid}, timeout=15)
+    except Exception:
+        pass
+
+
+def _reap_one(sid: str, force: bool = False, ttl: float | None = None) -> bool:
+    ttl = config.TEMP_TTL if ttl is None else ttl
+    with _lock:
+        if sid not in _sessions:
+            return False
+        if not force and (
+            _inflight.get(sid) or time.monotonic() - _sessions[sid] <= ttl
+        ):
+            # a call is executing on it, or a touch landed after the reaper
+            # cycle snapshot was taken (TOCTOU guard)
+            return False
     if not force and _turn_running(sid):
         return False
+    from .store import discard_session  # late import: tests monkeypatch it
+
+    _end_runtime_session(sid)
     try:
         discard_session(sid)
     except Exception as e:
         log(f"temp reaper: discard {sid} failed: {e!r}")
-        return False
+        return False  # keep registered; the next cycle retries
     with _lock:
         _sessions.pop(sid, None)
+        _inflight.pop(sid, None)
+    try:
+        from .appserver import SERVER
+
+        SERVER.monitors.pop(sid, None)
+    except Exception:
+        pass
     log(f"temp reaper: discarded temporary conversation {sid}")
     return True
 
@@ -93,7 +172,7 @@ def _reap_cycle(ttl: float | None = None) -> int:
         return 0
     reaped = 0
     for sid in _due_sids(time.monotonic(), ttl):
-        if _reap_one(sid):
+        if _reap_one(sid, ttl=ttl):
             reaped += 1
     return reaped
 

@@ -79,10 +79,13 @@ def _aliases_for(available: list) -> dict:
     return build_provider_aliases(available or [])
 
 
-def _not_found(sid: str) -> str:
-    msg = f"error: session not found: {sid}"
+def _not_found_msg(base: str, sid: str) -> str:
     hint = ephemeral.note(sid)
-    return f"{msg}\n{hint}" if hint else msg
+    return f"{base}\n{hint}" if hint else base
+
+
+def _not_found(sid: str) -> str:
+    return _not_found_msg(f"error: session not found: {sid}", sid)
 
 
 def tool_zcode_session_new(args: dict) -> str:
@@ -109,12 +112,9 @@ def tool_zcode_session_new(args: dict) -> str:
     selection = None
     selector = args.get("model") or DEFAULT_MODEL
     if selector:
+        avail = _available_from_cache() or []
         try:
-            selection = parse_model_selector(
-                selector,
-                _available_from_cache() or [],
-                _aliases_for(_available_from_cache() or []),
-            )
+            selection = parse_model_selector(selector, avail, _aliases_for(avail))
         except ValueError as e:
             if args.get("model"):
                 return f"error: {e}"
@@ -577,9 +577,7 @@ def tool_zcode_session_archive(args: dict) -> str:
     sid = args["session_id"]
     unarchive = bool(args.get("unarchive", False))
     if not session_exists(sid):
-        hint = ephemeral.note(sid)
-        base = f"error: session not found in session store: {sid}"
-        return f"{base}\n{hint}" if hint else base
+        return _not_found_msg(f"error: session not found in session store: {sid}", sid)
     res = set_session_archived(sid, not unarchive)
     verb = "unarchived" if unarchive else "archived"
     return (
@@ -599,9 +597,7 @@ def tool_zcode_session_discard(args: dict) -> str:
     except Exception as e:
         return f"error: cannot inspect session store: {e}"
     if scope.get("session", 0) == 0:
-        hint = ephemeral.note(sid)
-        base = f"error: session not found in session store: {sid}"
-        return f"{base}\n{hint}" if hint else base
+        return _not_found_msg(f"error: session not found in session store: {sid}", sid)
     total = sum(scope.values())
     if not confirm:
         rows = "\n".join(f"  {t}: {n}" for t, n in scope.items() if n)
@@ -622,6 +618,7 @@ def tool_zcode_session_discard(args: dict) -> str:
     deleted = discard_session(sid)
     total_deleted = sum(deleted.values())
     SERVER.monitors.pop(sid, None)
+    ephemeral.forget(sid)
     return (
         f"session_id={sid}\ndiscarded: {total_deleted} rows permanently deleted "
         f"(session + history). It will disappear from zcode_list and the desktop "
@@ -669,7 +666,8 @@ TOOLS = [
                                              "exits. No manual cleanup needed."},
                 "model": {"type": "string",
                           "description": "Model selector for the conversation: modelId | "
-                                         "providerId/modelId | providerId/modelId$reasoningLevel. "
+                                         "providerId/modelId | ProviderName/modelId (e.g. "
+                                         "CPA/gpt-5.6-luna) | ...$reasoningLevel. "
                                          "Call zcode_models to list options."},
                 "title_generation": {"type": "boolean"},
                 "wait": {"type": "boolean", "description": "Block until the turn ends (default true)."},
