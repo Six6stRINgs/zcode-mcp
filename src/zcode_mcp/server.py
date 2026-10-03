@@ -24,12 +24,14 @@ from typing import Any
 
 try:
     from . import __version__
+    from . import ephemeral
     from .appserver import SERVER
     from .config import DEFAULT_WS, NO_WARMUP, log, resolve_zcode_cjs
     from .tools import TOOL_IMPL, TOOLS
 except ImportError:  # executed as a plain script
     sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
     from zcode_mcp import __version__
+    from zcode_mcp import ephemeral
     from zcode_mcp.appserver import SERVER
     from zcode_mcp.config import DEFAULT_WS, NO_WARMUP, log, resolve_zcode_cjs
     from zcode_mcp.tools import TOOL_IMPL, TOOLS
@@ -48,6 +50,10 @@ def _dispatch_tool(req_id: Any, params: dict) -> None:
             {"content": [{"type": "text", "text": f"unknown tool: {name}"}], "isError": True},
         )
     else:
+        sid = targs.get("session_id")
+        if sid:
+            ephemeral.touch(sid)
+            ephemeral.begin(sid)
         try:
             resp = mcp_result(req_id, {"content": [{"type": "text", "text": impl(targs)}]})
         except Exception as e:
@@ -59,6 +65,9 @@ def _dispatch_tool(req_id: Any, params: dict) -> None:
                     "isError": True,
                 },
             )
+        finally:
+            if sid:
+                ephemeral.end(sid)
     out = json.dumps(resp, ensure_ascii=False)
     log(f"MCP -> {out[:200]}")
     with _stdout_lock:

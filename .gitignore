@@ -5,6 +5,10 @@ build/
 dist/
 .venv/
 venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+.coverage
 
 # runtime artifacts
 bridge.log
@@ -15,3 +19,4 @@ sandbox/*
 # protocol reference clone (local only)
 ref/
 
+uv.lock

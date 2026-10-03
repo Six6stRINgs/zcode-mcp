@@ -261,11 +261,25 @@ def wait_turn(sid: str, timeout: float = DEFAULT_TIMEOUT) -> tuple[str, str, str
             else:
                 idle_since = None
     if mon.turn_state == "running":
+        act = mon.activity()
+        tail = ""
+        if act["stream_chars"]:
+            out = mon.current_output(160).replace("\n", " ")
+            tail = f" output so far: …{out}"
         note = (
-            "no terminal event after {t}s — the turn is still live (possibly "
-            "retrying the model request). The turn keeps running; just call "
-            "zcode_wait again to continue collecting."
-        ).format(t=timeout)
+            "no terminal event after {t}s — turn activity: {phase}{stream}{tail}. "
+            "The turn keeps running; just call zcode_session_wait again to "
+            "continue collecting."
+        ).format(
+            t=timeout,
+            phase=act["phase"],
+            stream=(
+                f" ({act['stream_chars']} chars streamed, last "
+                f"{act['last_stream_age_s']}s ago)"
+            )
+            if act["last_stream_age_s"] is not None else "",
+            tail=tail,
+        )
     else:
         note = f"no terminal event after {timeout}s"
     return "timeout", "", note

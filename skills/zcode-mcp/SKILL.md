@@ -35,10 +35,13 @@ Two things to internalize before calling anything:
 | `zcode_session_status` | JSON state: desktop status, turn state, recent events with ages |
 | `zcode_session_output` | Model's current streaming text, or last completed response |
 | `zcode_session_wait` | Block until the running turn ends; final reply |
+| `zcode_session_result` | Structured worker result for orchestration |
+| `zcode_session_diff` | Git status, changed files, and optional bounded diff |
+| `zcode_health` | Bridge, Node.js, ZCode CLI, app-server and catalogue health |
 | `zcode_session_stop` | Interrupt the running turn |
 | `zcode_models` | Standalone: FULL model catalogue across all providers |
 | `zcode_session_set_model` | Switch a conversation's model mid-flight |
-| `zcode_quota` | GLM Coding Plan / Start Plan quota windows |
+| `zcode_quota` | All plan quotas: Coding Plan windows + Start Plan token balances |
 | `zcode_session_permissions` | Pending permission/user-input requests pausing a non-yolo turn |
 | `zcode_session_decide` | Answer a pending request (allow/deny) — turn resumes |
 | `zcode_session_list` | Conversations across workspaces (`include_archived` to see archived) |
@@ -56,9 +59,11 @@ Two things to internalize before calling anything:
   that should land in a repo.
 - `zcode_session_new {text}` without `project` — lands in the bridge's sandbox
   workspace (env `ZCODE_MCP_WORKSPACE`); fine for questions and scratch.
-- `temporary: true` — throwaway conversation; pair with
-  `zcode_session_discard {session_id, confirm: true}` when done (dry-run first
-  without `confirm`).
+- `temporary: true` — throwaway subagent conversation: the bridge
+  auto-discards it after `ZCODE_MCP_TEMP_TTL` (default 600s) of inactivity
+  or when the bridge exits — no manual cleanup. Every tool call on the
+  session refreshes its idle clock, and a running turn is never reaped.
+  `zcode_session_discard` remains available for early deletion.
 - `zcode_session_archive {session_id}` — keep history, hide from lists;
   `unarchive: true` restores.
 
@@ -76,35 +81,42 @@ contents into `text`.
 
 ### Model selection & quota
 
-- `zcode_models {}` — the FULL catalogue across all providers (standalone)
-  (built-in, Coding Plan / Start Plan, custom), never narrowed by previous
-  switches, plus the session's current pick. Probes the catalogue on first
-  use when cold.
-- Selectors — canonical: `providerId/modelId`, optionally with
-  `$reasoningLevel` (`GLM-5.3-Flash$low`). A bare `modelId` resolves only
-  when unique across all providers. With no level, `high` is preferred
-  when the model supports it.
+- `zcode_models {}` — the FULL catalogue of session-addressable models
+  (standalone), with provider display names (`CPA/gpt-5.6-luna`,
+  `DeepSeek/deepseek-v4-pro`), never narrowed by previous switches. Also
+  lists the desktop-managed account sources (BigModel 个人 / Start Plan /
+  Z.ai) that sessions can NOT address. Probes the catalogue on first use
+  when cold.
+- Selectors — `providerId/modelId` (canonical), `ProviderName/modelId`
+  (e.g. `CPA/gpt-5.6-luna`; matched case/punctuation-insensitively), each
+  optionally with `$reasoningLevel` (`GLM-5.3-Flash$low`). A bare `modelId`
+  resolves only when unique across all providers. With no level, `high` is
+  preferred when the model supports it.
+- **Default:** without `model`, conversations run on
+  `bigmodel-api/GLM-5.3-Flash` (reasoning `high`) — the BigModel-family
+  channel, named after whatever its provider entry is called; overridable
+  via `ZCODE_MCP_DEFAULT_MODEL`.
 - `zcode_session_new {model: …}` starts a conversation on that model; a cold bridge
   first probes the catalogue with a throwaway session (invisible).
-- **Default:** without `model`, conversations run on the built-in
-  `GLM-5.3-Flash` (reasoning `high`) — overridable via
-  `ZCODE_MCP_DEFAULT_MODEL`.
 - `zcode_session_set_model {session_id, model}` switches mid-conversation; applies
   from the next message. After a switch the session's own list narrows to
   that provider — resolution uses the full cached catalogue, so
   cross-provider switches keep working.
+- Desktop-only sources (Start Plan, BigModel 个人) cannot be set from here —
+  selecting one by name returns guidance. Their quota is desktop-only: these
+  account sources never enter the registry bridge sessions address. Plain
+  API-key endpoints are a different matter — added as custom providers they
+  show up in `zcode_models` and work normally.
 - `zcode_quota {}` — plan windows (used / remaining / percentage / next
   reset). Needs the optional `cryptography` package. Check before long
   tasks; if a provider's credentials are cooling down, switch models.
-- **Default model:** without `model`, `zcode_session_new` uses the
-  built-in `bigmodel-api/GLM-5.3-Flash` at reasoning `high`
-  (`ZCODE_MCP_DEFAULT_MODEL` overrides).
 
 ### Observing a running turn
 
 ```
 zcode_session_status {session_id}   → turn_state, event ages — cheap, any time
-zcode_session_output {session_id}   → the model's text so far (streaming)
+zcode_session_output {session_id}   → the model's text so far (poll to refresh)
+zcode_session_result {session_id}   → structured terminal result for orchestration
 ```
 
 Statuses you can see from a blocked/collected turn:
@@ -114,9 +126,10 @@ Statuses you can see from a blocked/collected turn:
 
 ## Decision guide
 
-- One-off question, nothing to clean → `zcode_session_new {temporary: true}`, read reply, `zcode_session_discard`.
+- One-off question, nothing to clean → `zcode_session_new {temporary: true}`;
+  the conversation auto-discards itself afterwards.
 - Task touching a repo → `zcode_session_new {project: …}`; verify the workspace
-  yourself afterwards (tests, diffs).
+  yourself afterwards with `zcode_session_result`, `zcode_session_diff`, tests, and diffs.
 - Long or parallel work → `wait: false`, poll `zcode_session_status`/`zcode_session_output`,
   collect with `zcode_session_wait`; `zcode_session_stop` a worker going the wrong way.
 - Follow-up/correction → `zcode_session_send {session_id, …}` — the worker keeps
@@ -129,6 +142,7 @@ Statuses you can see from a blocked/collected turn:
 
 ## Sub-skills
 
+- **`zcode-code-reviewer`** — read-only code review over a diff.
 - **`zcode-subagent`** — orchestrating ZCode as a subagent worker:
   dispatch patterns, verification loops, per-project workers, lifecycle
   hygiene. Read it before building multi-worker or A2A flows.

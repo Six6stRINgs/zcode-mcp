@@ -8,11 +8,14 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
+import subprocess
 import time
 from typing import Any
 
-from .appserver import SERVER
+from .appserver import NODE_EXE, SERVER
 from . import config as _config
+from . import ephemeral
 from .config import DEFAULT_MODEL, DEFAULT_TIMEOUT, DEFAULT_WS, log
 from .protocol import (
     _message_texts,
@@ -21,7 +24,6 @@ from .protocol import (
     find_session,
     read_snapshot,
     run_turn,
-    send_message,
     session_list,
     set_model,
     snapshot_last_reply,
@@ -29,7 +31,9 @@ from .protocol import (
     subscribe,
     wait_turn,
 )
-from .models import _norm_session_models, fetch_quota, parse_model_selector
+from .models import (_norm_session_models, build_provider_aliases, fetch_quota,
+                     fetch_start_plan_balances, parse_model_selector,
+                     provider_registry)
 from .store import (
     archived_session_ids,
     discard_scope,
@@ -70,6 +74,20 @@ def _available_from_cache() -> list | None:
     return available
 
 
+def _aliases_for(available: list, registry: dict | None = None) -> dict:
+    """Provider display-name → id candidates for the current catalogue."""
+    return build_provider_aliases(available or [], registry)
+
+
+def _not_found_msg(base: str, sid: str) -> str:
+    hint = ephemeral.note(sid)
+    return f"{base}\n{hint}" if hint else base
+
+
+def _not_found(sid: str) -> str:
+    return _not_found_msg(f"error: session not found: {sid}", sid)
+
+
 def tool_zcode_session_new(args: dict) -> str:
     project = args.get("project")
     if project:
@@ -77,7 +95,7 @@ def tool_zcode_session_new(args: dict) -> str:
         if not os.path.isdir(project):
             return (
                 f"error: project directory does not exist: {project}\n"
-                "zcode_new(project=…) attaches the conversation to an EXISTING "
+                "zcode_session_new(project=…) attaches the conversation to an EXISTING "
                 "project; create it first or use cwd instead."
             )
         cwd = project
@@ -90,26 +108,16 @@ def tool_zcode_session_new(args: dict) -> str:
     except RuntimeError as e:
         if args.get("model"):
             return f"error: {e}"
+        log(f"model catalogue probe failed ({e}); using runtime default")
     selection = None
     selector = args.get("model") or DEFAULT_MODEL
     if selector:
-        if _available_from_cache() is None:
-            # resolve needs the catalogue; a cold bridge probes it with a
-            # throwaway deferred session (invisible, closed right after)
-            try:
-                probe = create_session(cwd=cwd, mode="yolo",
-                                       title_generation=False, persistence="deferred")
-            except Exception as e:
-                if args.get("model"):
-                    return f"error: cannot probe model list: {e}"
-                log(f"model catalogue probe failed ({e}); using runtime default")
-            else:
-                try:
-                    SERVER.request("session/close", {"sessionId": probe}, timeout=15)
-                except Exception:
-                    pass
+        avail = _available_from_cache() or []
+        registry = provider_registry()
         try:
-            selection = parse_model_selector(selector, _available_from_cache() or [])
+            selection = parse_model_selector(
+                selector, avail, _aliases_for(avail, registry), registry
+            )
         except ValueError as e:
             if args.get("model"):
                 return f"error: {e}"
@@ -121,35 +129,48 @@ def tool_zcode_session_new(args: dict) -> str:
         title_generation=bool(args.get("title_generation", False)),
         persistence="deferred" if temporary else None,
     )
-    if selection:
-        # setModel is the canonical switch path; it applies the reasoning
-        # level that session/create's model param dropped
-        try:
-            set_model(sid, selection)
-        except RuntimeError as e:
-            return f"session_id={sid}" + chr(10) + f"error: model switch failed: {e}"
-    try:
-        atts = build_attachments(args.get("files"))
-    except FileNotFoundError as e:
-        return f"error: {e}"
-    atts += args.get("attachments") or []
-    header = f"session_id={sid}\nworkspace={cwd}"
     if temporary:
-        header += "\n(temporary conversation: discard it with zcode_session_discard when done)"
-    if project:
-        header += "\n(project conversation: ZCode edits files inside this project; "
-        header += "the desktop app shows it under the project)"
-    body = run_turn(
-        sid, args.get("text", ""), atts or None, args.get("wait", True),
-        _effective_timeout(args),
-    )
-    return f"{header}\n{body}"
+        ephemeral.register(sid)
+        # hold the in-flight mark across our own turn: with a short
+        # TEMP_TTL the reaper must not outrun the very call that created it
+        ephemeral.begin(sid)
+    try:
+        if selection:
+            # setModel is the canonical switch path; it applies the reasoning
+            # level that session/create's model param dropped
+            try:
+                set_model(sid, selection)
+            except RuntimeError as e:
+                return f"session_id={sid}" + chr(10) + f"error: model switch failed: {e}"
+        try:
+            atts = build_attachments(args.get("files"))
+        except FileNotFoundError as e:
+            return f"error: {e}"
+        atts += args.get("attachments") or []
+        header = f"session_id={sid}\nworkspace={cwd}"
+        if temporary:
+            header += (
+                f"\n(temporary conversation: auto-discarded after "
+                f"{_config.TEMP_TTL}s of inactivity or when the bridge exits; "
+                f"subagent workers need no manual cleanup)"
+            )
+        if project:
+            header += "\n(project conversation: ZCode edits files inside this project; "
+            header += "the desktop app shows it under the project)"
+        body = run_turn(
+            sid, args.get("text", ""), atts or None, args.get("wait", True),
+            _effective_timeout(args),
+        )
+        return f"{header}\n{body}"
+    finally:
+        if temporary:
+            ephemeral.end(sid)
 
 
 def tool_zcode_session_send(args: dict) -> str:
     sid = args["session_id"]
     if find_session(sid) is None:
-        return f"error: session not found: {sid}"
+        return _not_found(sid)
     try:
         atts = build_attachments(args.get("files"))
     except FileNotFoundError as e:
@@ -176,6 +197,8 @@ def tool_zcode_session_list(args: dict) -> str:
             continue
         ws = (s.get("workspace") or {}).get("workspacePath", "?")
         marker = " [archived]" if sid in archived else ""
+        if ephemeral.is_temporary(sid):
+            marker += " [temporary]"
         lines.append(
             f"{sid:40} {s.get('status', '?'):10} {s.get('mode', '?'):7} "
             f"{s.get('title', '(untitled)')} ({ws}){marker}"
@@ -193,7 +216,7 @@ def tool_zcode_session_status(args: dict) -> str:
     mon = SERVER._monitor(sid)
     s = find_session(sid)
     if s is None and not mon.events:
-        return f"error: session not found: {sid}"
+        return _not_found(sid)
     current_model = mon.current_model or (SERVER.last_models or {}).get("current")
     info = {
         "session_id": sid,
@@ -204,8 +227,8 @@ def tool_zcode_session_status(args: dict) -> str:
         "current_model": (
             f"{current_model.get('providerId')}/{current_model.get('modelId')}"
             + (
-                f"${current_model['options']['reasoningLevel']}"
-                if (current_model or {}).get("options", {}).get("reasoningLevel")
+                f"${(current_model.get('options') or {}).get('reasoningLevel')}"
+                if (current_model.get("options") or {}).get("reasoningLevel")
                 else ""
             )
             if current_model
@@ -258,6 +281,112 @@ def tool_zcode_session_output(args: dict) -> str:
     return "\n\n".join(parts)
 
 
+def _session_context(sid: str) -> tuple[dict | None, Any]:
+    """Return persisted session metadata and its live monitor."""
+    return find_session(sid), SERVER._monitor(sid)
+
+
+def tool_zcode_session_result(args: dict) -> str:
+    """Return a compact, machine-readable worker result snapshot."""
+    sid = args["session_id"]
+    session, mon = _session_context(sid)
+    if session is None and not mon.events:
+        return _not_found(sid)
+    reply = mon.last_response
+    if not reply and mon.turn_state != "running":
+        try:
+            reply = snapshot_last_reply(read_snapshot(sid))
+        except Exception as e:
+            log(f"result snapshot read failed for {sid}: {e}")
+    model = mon.current_model or (SERVER.last_models or {}).get("current")
+    result = {
+        "session_id": sid,
+        "status": mon.last_result_type or mon.turn_state,
+        "turn_state": mon.turn_state,
+        "reply": reply or None,
+        "error": mon.last_error or None,
+        "pending_interactions": len(SERVER.pending_for(sid)),
+        "workspace": (session or {}).get("workspace", {}).get("workspacePath"),
+        "mode": (session or {}).get("mode"),
+        "current_model": (
+            f"{model.get('providerId')}/{model.get('modelId')}"
+            if model else None
+        ),
+    }
+    return json.dumps(result, ensure_ascii=False, indent=1)
+
+
+def _run_git(workspace: str, *args: str) -> subprocess.CompletedProcess[str]:
+    return subprocess.run(
+        ["git", "-C", workspace, *args],
+        capture_output=True,
+        text=True,
+        encoding="utf-8",
+        errors="replace",
+        timeout=15,
+        check=False,
+    )
+
+
+def tool_zcode_session_diff(args: dict) -> str:
+    """Summarize git changes in the worker's project workspace."""
+    sid = args["session_id"]
+    session = find_session(sid)
+    if session is None:
+        return _not_found(sid)
+    workspace = (session.get("workspace") or {}).get("workspacePath")
+    if not workspace or not os.path.isdir(workspace):
+        return f"error: workspace not found for session: {sid}"
+    try:
+        root = _run_git(workspace, "rev-parse", "--show-toplevel")
+    except (OSError, subprocess.TimeoutExpired) as e:
+        return f"error: cannot inspect git workspace: {e}"
+    if root.returncode != 0:
+        return json.dumps({"session_id": sid, "workspace": workspace, "is_git_repo": False}, ensure_ascii=False, indent=1)
+    status = _run_git(workspace, "status", "--short")
+    stat = _run_git(workspace, "diff", "HEAD", "--stat")
+    name_status = _run_git(workspace, "diff", "HEAD", "--name-status")
+    result = {
+        "session_id": sid,
+        "workspace": workspace,
+        "is_git_repo": True,
+        "root": root.stdout.strip(),
+        "status": status.stdout.splitlines(),
+        "changed_files": name_status.stdout.splitlines(),
+        "stat": stat.stdout.strip(),
+    }
+    if args.get("include_diff"):
+        max_chars = max(1, min(int(args.get("max_chars") or 20000), 100000))
+        diff = _run_git(workspace, "diff", "HEAD", "--no-ext-diff", "--", ".")
+        result["diff"] = diff.stdout[:max_chars]
+        result["diff_truncated"] = len(diff.stdout) > max_chars
+    return json.dumps(result, ensure_ascii=False, indent=1)
+
+
+def tool_zcode_health(args: dict) -> str:
+    """Report bridge and app-server health without creating a conversation."""
+    try:
+        zcode_cjs = _config.resolve_zcode_cjs()
+        cjs_ok = os.path.isfile(zcode_cjs)
+    except Exception as e:
+        zcode_cjs = None
+        cjs_ok = False
+        cjs_error = str(e)
+    proc = SERVER._proc
+    app_state = "running" if proc is not None and proc.poll() is None else "not_started"
+    result = {
+        "bridge": "ok",
+        "server_version": getattr(__import__("zcode_mcp"), "__version__", None),
+        "node": {"executable": NODE_EXE, "available": shutil.which(NODE_EXE) is not None or os.path.isfile(NODE_EXE)},
+        "zcode_cli": {"path": zcode_cjs, "available": cjs_ok},
+        "app_server": {"state": app_state, "storage_ready": bool(getattr(SERVER, "_storage_ready", False))},
+        "model_catalog_cached": SERVER.last_models is not None,
+    }
+    if not cjs_ok:
+        result["zcode_cli"]["error"] = cjs_error
+    return json.dumps(result, ensure_ascii=False, indent=1)
+
+
 def tool_zcode_session_permissions(args: dict) -> str:
     sid = args["session_id"]
     parked = SERVER.pending_for(sid)
@@ -301,7 +430,8 @@ def tool_zcode_session_decide(args: dict) -> str:
         return f"error: no pending interaction {rid}"
     return (
         f"request_id={rid}\ndecision={decision} sent. The turn continues; "
-        "collect the result with zcode_session_wait (or keep observing with zcode_status)."
+        "collect the result with zcode_session_wait (or keep observing with "
+        "zcode_session_status)."
     )
 
 
@@ -309,23 +439,45 @@ def tool_zcode_models(args: dict) -> str:
     """Standalone: the FULL model catalogue across all providers.
 
     Never requires or touches a session; probes the catalogue once when cold.
-    Model identity is canonical ``providerId/modelId``.
+    Model identity is canonical ``providerId/modelId``; display names come
+    from the ZCode provider registries and are also valid selector forms.
     """
     try:
         available = _ensure_catalogue()
     except RuntimeError as e:
         return f"error: {e}"
+    registry = provider_registry()
+    addressable = {m.get("provider_id") for m in available if m.get("provider_id")}
     lines = [f"available models ({len(available)}):"]
     for m in available:
+        pid = m.get("provider_id") or ""
+        name = (registry.get(pid) or {}).get("name") or m.get("provider_label") or pid
+        shown = f"{name}/{m['model_id']}" if name != pid else f"{pid}/{m['model_id']}"
+        idpart = "" if name == pid else f"  id={pid}/{m['model_id']}"
         lines.append(
-            f"- {m['provider_id']}/{m['model_id']}  label={m.get('label')}  "
-            f"provider={m.get('provider_label')}  ctx={m.get('context_window')}  "
+            f"- {shown}{idpart}  ctx={m.get('context_window')}  "
             f"reasoning={m.get('reasoning_levels')} (default {m.get('default_reasoning')})"
         )
+    desktop_only = [
+        (pid, info) for pid, info in sorted(registry.items())
+        if pid not in addressable
+    ]
+    if desktop_only:
+        lines.append("")
+        lines.append(
+            "desktop-managed sources (logged-in/account providers in ZCode's "
+            "config; NOT addressable from MCP sessions — pick them in the "
+            "ZCode desktop model picker, or add them as custom providers):"
+        )
+        for pid, info in desktop_only:
+            models = ", ".join(info.get("models") or []) or "(no models)"
+            state = "enabled" if info.get("enabled") else "disabled"
+            lines.append(f"- {info.get('name') or pid} ({pid}, {state}): {models}")
     lines.append("")
     lines.append(
-        "selector: providerId/modelId or providerId/modelId$reasoningLevel "
-        "(a bare modelId works only when unique across all providers)"
+        "selector: providerId/modelId or Name/modelId (e.g. CPA/gpt-5.6-luna, "
+        "DeepSeek/deepseek-v4-pro) or ...$reasoningLevel; a bare modelId works "
+        "only when unique across all providers"
     )
     return chr(10).join(lines)
 
@@ -339,8 +491,11 @@ def tool_zcode_session_set_model(args: dict) -> str:
         available = _ensure_catalogue()
     except RuntimeError as e:
         return f"error: {e}"
+    registry = provider_registry()
     try:
-        selection = parse_model_selector(args["model"], available)
+        selection = parse_model_selector(
+            args["model"], available, _aliases_for(available, registry), registry
+        )
     except ValueError as e:
         return f"error: {e}"
     try:
@@ -358,17 +513,37 @@ def tool_zcode_session_set_model(args: dict) -> str:
 
 
 def tool_zcode_quota(args: dict) -> str:
+    """All plan quotas: Coding Plan windows + Start Plan token balances."""
+    lines = []
     try:
         q = fetch_quota()
+        lines.append(f"Coding Plan ({q['level']}):")
+        for l in q["limits"]:
+            reset = f"  next reset: {l['next_reset']}" if l.get("next_reset") else ""
+            lines.append(
+                f"- {l['window']}: used {l['used']} / limit {l['limit']} "
+                f"(remaining {l['remaining']}, {l['percentage']}%){reset}"
+            )
     except RuntimeError as e:
-        return f"error: {e}"
-    lines = [f"plan level: {q['level']}"]
-    for l in q["limits"]:
-        reset = f"  next reset: {l['next_reset']}" if l.get("next_reset") else ""
-        lines.append(
-            f"- {l['window']}: used {l['used']} / limit {l['limit']} "
-            f"(remaining {l['remaining']}, {l['percentage']}%){reset}"
-        )
+        lines.append(f"Coding Plan: unavailable ({e})")
+    try:
+        sp = fetch_start_plan_balances()
+    except Exception as e:
+        sp = [{"provider": "?", "error": str(e)}]
+    for entry in sp or []:
+        name = entry.get("plan") or entry.get("provider")
+        if entry.get("error"):
+            lines.append(f"Start Plan ({name}): unavailable ({entry['error']})")
+            continue
+        lines.append(f"Start Plan ({name}, status: {entry.get('status')}):")
+        for b in entry.get("balances") or []:
+            lines.append(
+                f"- {b.get('model')}: used {b.get('used')} / total {b.get('total')} "
+                f"(remaining {b.get('remaining')}, {b.get('percentage')}%)"
+                + (f"  expires: {b.get('expires')}" if b.get("expires") else "")
+            )
+    if not lines:
+        return "no plan quota information available"
     return chr(10).join(lines)
 
 
@@ -413,7 +588,7 @@ def tool_zcode_session_archive(args: dict) -> str:
     sid = args["session_id"]
     unarchive = bool(args.get("unarchive", False))
     if not session_exists(sid):
-        return f"error: session not found in session store: {sid}"
+        return _not_found_msg(f"error: session not found in session store: {sid}", sid)
     res = set_session_archived(sid, not unarchive)
     verb = "unarchived" if unarchive else "archived"
     return (
@@ -433,7 +608,7 @@ def tool_zcode_session_discard(args: dict) -> str:
     except Exception as e:
         return f"error: cannot inspect session store: {e}"
     if scope.get("session", 0) == 0:
-        return f"error: session not found in session store: {sid}"
+        return _not_found_msg(f"error: session not found in session store: {sid}", sid)
     total = sum(scope.values())
     if not confirm:
         rows = "\n".join(f"  {t}: {n}" for t, n in scope.items() if n)
@@ -453,7 +628,9 @@ def tool_zcode_session_discard(args: dict) -> str:
         pass
     deleted = discard_session(sid)
     total_deleted = sum(deleted.values())
-    SERVER.monitors.pop(sid, None)
+    with SERVER._monitors_lock:
+        SERVER.monitors.pop(sid, None)
+    ephemeral.forget(sid)
     return (
         f"session_id={sid}\ndiscarded: {total_deleted} rows permanently deleted "
         f"(session + history). It will disappear from zcode_list and the desktop "
@@ -495,11 +672,14 @@ TOOLS = [
                 "cwd": {"type": "string", "description": "Workspace directory for the new conversation "
                                                          "(ignored when project is given)."},
                 "temporary": {"type": "boolean",
-                              "description": "Create as a throwaway conversation (deferred persistence); "
-                                             "pair with zcode_session_discard when done."},
+                              "description": "Create as a throwaway subagent conversation: "
+                                             "auto-discarded after ZCODE_MCP_TEMP_TTL "
+                                             "(default 600s) of inactivity or when the bridge "
+                                             "exits. No manual cleanup needed."},
                 "model": {"type": "string",
                           "description": "Model selector for the conversation: modelId | "
-                                         "providerId/modelId | providerId/modelId$reasoningLevel. "
+                                         "providerId/modelId | ProviderName/modelId (e.g. "
+                                         "CPA/gpt-5.6-luna) | ...$reasoningLevel. "
                                          "Call zcode_models to list options."},
                 "title_generation": {"type": "boolean"},
                 "wait": {"type": "boolean", "description": "Block until the turn ends (default true)."},
@@ -559,10 +739,9 @@ TOOLS = [
     {
         "name": "zcode_session_output",
         "description": (
-            "Observability: the model's CURRENT streaming output for a session "
-            "(text produced so far in the running turn), or the last completed "
-            "response. Lets other agents see intermediate reasoning/answers "
-            "instead of waiting blindly."
+            "Observability: what the model has written so far in the running turn "
+            "(accumulated from stream deltas — poll to refresh), or the last "
+            "completed response."
         ),
         "inputSchema": {
             "type": "object",
@@ -572,6 +751,39 @@ TOOLS = [
             },
             "required": ["session_id"],
         },
+    },
+    {
+        "name": "zcode_session_result",
+        "description": (
+            "Return a compact machine-readable result for a worker session: status, "
+            "reply, error, pending interactions, workspace and current model."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {"session_id": {"type": "string"}},
+            "required": ["session_id"],
+        },
+    },
+    {
+        "name": "zcode_session_diff",
+        "description": (
+            "Summarize git changes in a worker's project workspace. Set include_diff=true "
+            "to include a bounded unified diff."
+        ),
+        "inputSchema": {
+            "type": "object",
+            "properties": {
+                "session_id": {"type": "string"},
+                "include_diff": {"type": "boolean"},
+                "max_chars": {"type": "integer", "description": "Maximum diff characters, default 20000."},
+            },
+            "required": ["session_id"],
+        },
+    },
+    {
+        "name": "zcode_health",
+        "description": "Check bridge, Node.js, ZCode CLI and app-server health without creating a conversation.",
+        "inputSchema": {"type": "object", "properties": {}},
     },
     {
         "name": "zcode_session_archive",
@@ -594,10 +806,11 @@ TOOLS = [
     {
         "name": "zcode_session_discard",
         "description": (
-            "PERMANENTLY delete a ZCode conversation (session + full history) — "
-            "the throwaway counterpart of zcode_new(temporary=true). Without "
-            "confirm=true returns a dry-run row count; with confirm=true deletes "
-            "irreversibly."
+            "PERMANENTLY delete a ZCode conversation (session + full history). "
+            "Temporary conversations (zcode_session_new temporary=true) are "
+            "already auto-discarded; this is for early cleanup or for any "
+            "regular conversation. Without confirm=true returns a dry-run row "
+            "count; with confirm=true deletes irreversibly."
         ),
         "inputSchema": {
             "type": "object",
@@ -644,9 +857,11 @@ TOOLS = [
     {
         "name": "zcode_models",
         "description": (
-            "Standalone: list ALL models across ALL providers configured in ZCode "
-            "(built-in, Coding Plan / Start Plan, custom) with reasoning levels, "
-            "context windows and input capabilities. No conversation required."
+            "Standalone: list ALL session-addressable models across ALL providers "
+            "configured in ZCode (custom API providers, coding-plan channels) with "
+            "reasoning levels, context windows and input capabilities, plus the "
+            "desktop-managed account sources that sessions cannot address. No "
+            "conversation required."
         ),
         "inputSchema": {"type": "object", "properties": {}},
     },
@@ -655,7 +870,7 @@ TOOLS = [
         "description": (
             "Switch the model of an existing conversation (takes effect from the "
             "next message). Selector: modelId | providerId/modelId | "
-            "providerId/modelId$reasoningLevel."
+            "ProviderName/modelId (e.g. CPA/gpt-5.6-luna) | ...$reasoningLevel."
         ),
         "inputSchema": {
             "type": "object",
@@ -716,6 +931,8 @@ TOOL_IMPL = {
     "zcode_session_send": tool_zcode_session_send,
     "zcode_session_list": tool_zcode_session_list,
     "zcode_session_status": tool_zcode_session_status,
+    "zcode_session_result": tool_zcode_session_result,
+    "zcode_session_diff": tool_zcode_session_diff,
     "zcode_session_output": tool_zcode_session_output,
     "zcode_session_read": tool_zcode_session_read,
     "zcode_session_wait": tool_zcode_session_wait,
@@ -728,4 +945,5 @@ TOOL_IMPL = {
     "zcode_models": tool_zcode_models,
     "zcode_session_set_model": tool_zcode_session_set_model,
     "zcode_quota": tool_zcode_quota,
+    "zcode_health": tool_zcode_health,
 }

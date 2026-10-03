@@ -27,6 +27,15 @@ SESSION_DB_PATH = os.environ.get(
 TASKS_INDEX_PATH = os.environ.get(
     "ZCODE_MCP_TASKS_INDEX", os.path.join(ZCODE_HOME, "v2", "tasks-index.sqlite")
 )
+ZCODE_V2_CONFIG = os.environ.get(
+    "ZCODE_MCP_ZCODE_CONFIG", os.path.join(ZCODE_HOME, "v2", "config.json")
+)
+# app-server layer provider registry (the ONLY source of session-addressable
+# provider ids; config.json's provider map is the desktop/account layer)
+PROVIDER_CONFIG_PATH = os.environ.get(
+    "ZCODE_MCP_PROVIDER_CONFIG", os.path.join(ZCODE_HOME, "v2", "provider_config.json")
+)
+APP_VERSION = os.environ.get("ZCODE_MCP_APP_VERSION", "3.14.4")
 CREDENTIALS_PATH = os.environ.get(
     "ZCODE_MCP_CREDENTIALS", os.path.join(ZCODE_HOME, "v2", "credentials.json")
 )
@@ -41,6 +50,12 @@ DEFAULT_MODEL = os.environ.get(
 # must return before that so the orchestrator gets a resumable status instead
 # of a transport error.
 TOOL_BUDGET = int(os.environ.get("ZCODE_MCP_TOOL_BUDGET", "240"))
+# temporary (subagent) conversations are auto-discarded after this many
+# seconds without any tool call touching them (and when the bridge exits);
+# 0 disables idle reaping. deferred persistence alone only protects EMPTY
+# drafts — once a message is sent the session lands in the shared store,
+# so the bridge owns the cleanup.
+TEMP_TTL = int(os.environ.get("ZCODE_MCP_TEMP_TTL", "600"))
 DELIVERY_KIND = "desktop-continuous"
 TERMINAL_STATUSES = {"idle", "completed", "error", "paused"}
 IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}

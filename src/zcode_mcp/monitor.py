@@ -30,6 +30,7 @@ class SessionMonitor:
         self.last_status: str = ""
         self.current_model: dict | None = None
         self.turns_completed: int = 0
+        self.last_stream_at: float | None = None
 
     def feed(self, env: dict) -> None:
         etype = env.get("type", "")
@@ -41,6 +42,7 @@ class SessionMonitor:
             self.stream_mid = None
             self.stream_text = []
         elif etype == "model.streaming":
+            self.last_stream_at = time.time()
             kind = payload.get("kind", "text_delta")
             if kind == "text_delta":
                 mid = payload.get("assistantMessageId")
@@ -71,6 +73,34 @@ class SessionMonitor:
             status = (payload.get("patch") or {}).get("status")
             if isinstance(status, str):
                 self.last_status = status
+
+    def activity(self) -> dict:
+        """Classify what the turn is doing right now.
+
+        phase: streaming (text/reasoning deltas arriving), producing (turn
+        started, no deltas yet — thinking or tool calls), stalled (started
+        but quiet for a long while), idle (no turn observed).
+        """
+        now = time.time()
+        last_event_age = round(now - self.events[-1][0], 1) if self.events else None
+        stream_age = round(now - self.last_stream_at, 1) if self.last_stream_at else None
+        chars = len("".join(self.stream_text))
+        if self.turn_state != "running":
+            phase = "idle"
+        elif stream_age is not None and stream_age <= 10:
+            phase = "streaming"
+        elif last_event_age is not None and last_event_age <= 15:
+            phase = "producing"
+        elif last_event_age is not None:
+            phase = "stalled"
+        else:
+            phase = "unknown"
+        return {
+            "phase": phase,
+            "stream_chars": chars,
+            "last_stream_age_s": stream_age,
+            "last_event_age_s": last_event_age,
+        }
 
     def current_output(self, max_chars: int = 4000) -> str:
         text = "".join(self.stream_text)
