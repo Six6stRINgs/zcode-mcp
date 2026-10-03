@@ -59,6 +59,8 @@ def _norm_session_models(snapshot: dict) -> tuple[dict | None, list[dict]]:
         input_format = (
             props.get("inputFormat") if isinstance(props, dict) else None
         ) or {}
+        if not isinstance(input_format, dict):
+            input_format = {}
         available.append(
             {
                 "provider_id": ref.get("providerId"),
@@ -286,10 +288,12 @@ def parse_model_selector(
             level,
         )
     else:
-        # bare modelId: resolve against available
+        # bare modelId: resolve against available; entries without a usable
+        # model_id only match by label
         matches = [
             m for m in available
-            if (m.get("model_id") or "").lower() == selector.lower()
+            if (isinstance(m.get("model_id"), str)
+                and m["model_id"].lower() == selector.lower())
             or (m.get("label") or "").lower() == selector.lower()
         ]
         if len(matches) == 1:
