@@ -47,11 +47,26 @@ from .config import (
 from .monitor import SessionMonitor
 
 # GUI hosts may launch us with a PATH that lacks node; resolve once and fall
-# back to the standard Windows install location (then to bare "node").
-NODE_EXE = shutil.which("node") or (
-    "C:/Program Files/nodejs/node.exe"
-    if os.path.isfile("C:/Program Files/nodejs/node.exe") else "node"
-)
+# back to each platform's standard install location (then to bare "node").
+_NODE_FALLBACKS = [
+    "C:/Program Files/nodejs/node.exe",  # Windows
+    "/usr/local/bin/node",  # macOS / Linux (source, Homebrew Intel)
+    "/opt/homebrew/bin/node",  # macOS (Homebrew ARM)
+    "/usr/bin/node",
+]
+
+
+def _resolve_node() -> str:
+    found = shutil.which("node")
+    if found:
+        return found
+    for candidate in _NODE_FALLBACKS:
+        if os.path.isfile(candidate):
+            return candidate
+    return "node"
+
+
+NODE_EXE = _resolve_node()
 
 
 class AppServer:

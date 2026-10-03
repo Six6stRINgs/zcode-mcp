@@ -22,7 +22,7 @@ ZCode 的 Model Context Protocol (MCP) 桥接服务。
 - **Python**：≥ 3.9
 - **Node.js**：系统已安装或使用 ZCode 桌面端内置运行时
 - **ZCode**：已安装并完成登录的 ZCode 桌面端或 CLI（推荐 0.16.x 及以上）
-- **操作系统**：Windows 优先（默认自动探测标准安装路径），核心逻辑跨平台支持
+- **操作系统**：跨平台支持（Windows、Linux、macOS），自动探测各平台标准安装路径
 
 ## 接入配置
 

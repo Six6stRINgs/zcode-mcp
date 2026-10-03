@@ -22,7 +22,7 @@ Connects local ZCode runtime capabilities into external AI agent workflows (such
 - **Python**: ≥ 3.9
 - **Node.js**: System installation or the runtime bundled with ZCode Desktop
 - **ZCode**: Installed and logged in via ZCode Desktop or CLI (0.16.x or newer)
-- **Operating System**: Windows-first (standard installation paths detected automatically), cross-platform core architecture
+- **Operating System**: Cross-platform (Windows, Linux, macOS); standard installation paths detected automatically on each platform
 
 ## Setup
 

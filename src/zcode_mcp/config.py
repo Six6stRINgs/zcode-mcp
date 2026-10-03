@@ -84,13 +84,35 @@ def resolve_zcode_cjs() -> str:
         raise RuntimeError(
             f"ZCODE_CJS is set but the file does not exist: {env}"
         )
-    local_app = os.environ.get("LOCALAPPDATA", os.path.expanduser("~/AppData/Local"))
-    roots = [
-        os.path.join(local_app, "Programs", "ZCode"),
-        os.path.join(local_app, "ZCode"),
-        "C:/Program Files/ZCode",
-        "C:/Program Files (x86)/ZCode",
-    ]
+    roots: list[str] = []
+    if os.name == "nt":
+        local_app = os.environ.get("LOCALAPPDATA", os.path.expanduser("~/AppData/Local"))
+        roots += [
+            os.path.join(local_app, "Programs", "ZCode"),
+            os.path.join(local_app, "ZCode"),
+            os.path.expandvars(r"%ProgramFiles%/ZCode"),
+            os.path.expandvars(r"%ProgramFiles(x86)%/ZCode"),
+        ]
+    else:
+        roots += [
+            os.path.expanduser("~/.zcode"),
+            os.path.expanduser("~/.local/share/ZCode"),
+            os.path.expanduser("~/.local/opt/zcode"),
+            "/opt/zcode",
+            "/opt/ZCode",
+            "/usr/local/share/zcode",
+            "/usr/local/lib/zcode",
+        ]
+    # walk up from PATH entries whose folder mentions zcode — catches any
+    # non-standard install root (drive-letter-specific or not) without
+    # hardcoding it
+    for p in os.environ.get("PATH", "").split(os.pathsep):
+        if "zcode" in p.lower():
+            cur = p
+            for _ in range(4):
+                if cur and cur not in roots:
+                    roots.append(cur)
+                cur = os.path.dirname(cur)
     for root in roots:
         cjs = os.path.join(root, "resources", "glm", "zcode.cjs")
         if os.path.isfile(cjs):
