@@ -112,7 +112,16 @@ def _turn_running(sid: str) -> bool:
 
 def _end_runtime_session(sid: str) -> None:
     """Best-effort: stop the turn and close the runtime session so the
-    app-server holds nothing that could resurrect rows after the DELETE."""
+    app-server holds nothing that could resurrect rows after the DELETE.
+    Never spawns a replacement app-server just to deliver these."""
+    try:
+        from .appserver import SERVER
+
+        proc = SERVER._proc
+    except Exception:
+        return
+    if proc is None or proc.poll() is not None:
+        return
     try:
         from .protocol import stop_session
 
@@ -120,8 +129,6 @@ def _end_runtime_session(sid: str) -> None:
     except Exception:
         pass
     try:
-        from .appserver import SERVER
-
         SERVER.request("session/close", {"sessionId": sid}, timeout=15)
     except Exception:
         pass
@@ -154,7 +161,8 @@ def _reap_one(sid: str, force: bool = False, ttl: float | None = None) -> bool:
     try:
         from .appserver import SERVER
 
-        SERVER.monitors.pop(sid, None)
+        with SERVER._monitors_lock:
+            SERVER.monitors.pop(sid, None)
     except Exception:
         pass
     log(f"temp reaper: discarded temporary conversation {sid}")

@@ -47,8 +47,18 @@ def _norm_session_models(snapshot: dict) -> tuple[dict | None, list[dict]]:
     current = model.get("current") or None
     available = []
     for m in model.get("available") or []:
+        if not isinstance(m, dict):
+            continue
         ref = m.get("ref") or {}
+        if not isinstance(ref, dict):
+            ref = {}
         reasoning = m.get("reasoning") or {}
+        if not isinstance(reasoning, dict):
+            reasoning = {}
+        props = m.get("properties")
+        input_format = (
+            props.get("inputFormat") if isinstance(props, dict) else None
+        ) or {}
         available.append(
             {
                 "provider_id": ref.get("providerId"),
@@ -57,10 +67,13 @@ def _norm_session_models(snapshot: dict) -> tuple[dict | None, list[dict]]:
                 "provider_label": m.get("providerLabel"),
                 "context_window": m.get("contextWindow"),
                 "max_output_tokens": m.get("maxOutputTokens"),
-                "reasoning_levels": [l.get("value") for l in reasoning.get("levels") or []],
+                "reasoning_levels": [
+                    l.get("value") for l in (reasoning.get("levels") or [])
+                    if isinstance(l, dict)
+                ],
                 "default_reasoning": reasoning.get("defaultLevel"),
                 "input": {
-                    k: v for k, v in (m.get("properties") or {}).get("inputFormat", {}).items()
+                    k: v for k, v in input_format.items()
                 },
             }
         )
@@ -83,14 +96,20 @@ def provider_registry() -> dict[str, dict]:
         for r in ((d.get("config") or {}).get("providerConfigRules") or {}).get(
             "providerRules"
         ) or []:
+            if not isinstance(r, dict):
+                continue
             pid = r.get("providerId")
             if not pid:
                 continue
+            rcfg = r.get("config")
+            if not isinstance(rcfg, dict):
+                rcfg = {}
+            models = rcfg.get("personalModelIds")
             reg[pid] = {
                 "name": r.get("providerName") or pid,
                 "origin": "provider_config",
                 "enabled": True,
-                "models": list((r.get("config") or {}).get("personalModelIds") or []),
+                "models": list(models or []),
             }
     except (OSError, ValueError, AttributeError, TypeError) as e:
         log(f"provider registry: {PROVIDER_CONFIG_PATH} unreadable ({e!r})")
@@ -100,11 +119,14 @@ def provider_registry() -> dict[str, dict]:
         for pid, p in (cfg.get("provider") or {}).items():
             if pid in reg:
                 continue
+            if not isinstance(p, dict):
+                p = {}
+            models = p.get("models")
             reg[pid] = {
                 "name": p.get("name") or pid,
                 "origin": "config",
                 "enabled": bool(p.get("enabled", True)),
-                "models": list((p.get("models") or {}).keys()),
+                "models": list(models.keys() if isinstance(models, dict) else []),
             }
     except (OSError, ValueError, AttributeError, TypeError) as e:
         log(f"provider registry: {ZCODE_V2_CONFIG} unreadable ({e!r})")
@@ -254,6 +276,10 @@ def parse_model_selector(
         level = level.strip() or None
     if "/" in selector:
         provider_id, model_id = selector.split("/", 1)
+        if not provider_id.strip() or not model_id.strip():
+            raise ValueError(
+                f"invalid model selector '{selector}': use provider/model"
+            )
         selection = _selection(
             _resolve_provider(provider_id.strip(), available, aliases, registry),
             model_id.strip(),
@@ -263,7 +289,7 @@ def parse_model_selector(
         # bare modelId: resolve against available
         matches = [
             m for m in available
-            if m.get("model_id", "").lower() == selector.lower()
+            if (m.get("model_id") or "").lower() == selector.lower()
             or (m.get("label") or "").lower() == selector.lower()
         ]
         if len(matches) == 1:

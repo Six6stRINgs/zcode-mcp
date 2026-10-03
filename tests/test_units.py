@@ -234,6 +234,22 @@ class ProviderRegistryTest(unittest.TestCase):
         self.models.ZCODE_V2_CONFIG = str(self.tmp / "nope2.json")
         self.assertEqual(self.models.provider_registry(), {})
 
+    def test_shape_drifted_configs_survive(self):
+        # foreign JSON shapes must degrade to a partial/empty registry,
+        # never raise out of provider_registry()
+        import zcode_mcp.models as models
+
+        _write_json(self.pc, {"config": ["not-a-dict"]})
+        _write_json(self.v2, {"provider": ["not-a-dict"]})
+        self.assertEqual(models.provider_registry(), {})
+        _write_json(self.pc, {"config": {"providerConfigRules": {"providerRules": [
+            "not-a-dict", {"providerId": "uuid-1", "providerName": "CPA",
+                           "config": ["not-a-dict"]},
+        ]}}})
+        _write_json(self.v2, {"provider": {"p1": "not-a-dict"}})
+        reg = models.provider_registry()
+        self.assertEqual(reg.get("uuid-1", {}).get("name"), "CPA")
+
 
 class ProviderAliasTest(unittest.TestCase):
     """Name-based selector resolution."""
@@ -356,8 +372,13 @@ class EphemeralTest(unittest.TestCase):
         with self.eph._lock:
             self.eph._sessions.clear()
             self.eph._inflight.clear()
+        # defuse the background reaper thread for every test: it must never
+        # touch the real store or spawn an app-server behind our backs
+        self._orig_reap_cycle = self.eph._reap_cycle
+        self.eph._reap_cycle = lambda ttl=None: 0
 
     def tearDown(self):
+        self.eph._reap_cycle = self._orig_reap_cycle
         with self.eph._lock:
             self.eph._sessions.clear()
             self.eph._inflight.clear()
@@ -491,6 +512,7 @@ class EphemeralTest(unittest.TestCase):
         orig_running = self.eph._turn_running
         store.discard_session = lambda sid: calls.append(sid) or {"session": 1}
         self.eph._turn_running = lambda sid: False
+        self.eph._reap_cycle = self._orig_reap_cycle  # real cycle, patched store
         try:
             self.eph.register("sess_due")
             with self.eph._lock:
@@ -525,6 +547,7 @@ class EphemeralTest(unittest.TestCase):
 
     def test_reap_cycle_disabled_when_ttl_zero(self):
         self.eph.register("sess_t2")
+        self.eph._reap_cycle = self._orig_reap_cycle  # exercise the real guard
         self.assertEqual(self.eph._reap_cycle(ttl=0), 0)
         self.assertTrue(self.eph.is_temporary("sess_t2"))
 

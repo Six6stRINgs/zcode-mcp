@@ -74,9 +74,9 @@ def _available_from_cache() -> list | None:
     return available
 
 
-def _aliases_for(available: list) -> dict:
+def _aliases_for(available: list, registry: dict | None = None) -> dict:
     """Provider display-name → id candidates for the current catalogue."""
-    return build_provider_aliases(available or [])
+    return build_provider_aliases(available or [], registry)
 
 
 def _not_found_msg(base: str, sid: str) -> str:
@@ -113,9 +113,10 @@ def tool_zcode_session_new(args: dict) -> str:
     selector = args.get("model") or DEFAULT_MODEL
     if selector:
         avail = _available_from_cache() or []
+        registry = provider_registry()
         try:
             selection = parse_model_selector(
-                selector, avail, _aliases_for(avail), provider_registry()
+                selector, avail, _aliases_for(avail, registry), registry
             )
         except ValueError as e:
             if args.get("model"):
@@ -130,33 +131,40 @@ def tool_zcode_session_new(args: dict) -> str:
     )
     if temporary:
         ephemeral.register(sid)
-    if selection:
-        # setModel is the canonical switch path; it applies the reasoning
-        # level that session/create's model param dropped
-        try:
-            set_model(sid, selection)
-        except RuntimeError as e:
-            return f"session_id={sid}" + chr(10) + f"error: model switch failed: {e}"
+        # hold the in-flight mark across our own turn: with a short
+        # TEMP_TTL the reaper must not outrun the very call that created it
+        ephemeral.begin(sid)
     try:
-        atts = build_attachments(args.get("files"))
-    except FileNotFoundError as e:
-        return f"error: {e}"
-    atts += args.get("attachments") or []
-    header = f"session_id={sid}\nworkspace={cwd}"
-    if temporary:
-        header += (
-            f"\n(temporary conversation: auto-discarded after "
-            f"{_config.TEMP_TTL}s of inactivity or when the bridge exits; "
-            f"subagent workers need no manual cleanup)"
+        if selection:
+            # setModel is the canonical switch path; it applies the reasoning
+            # level that session/create's model param dropped
+            try:
+                set_model(sid, selection)
+            except RuntimeError as e:
+                return f"session_id={sid}" + chr(10) + f"error: model switch failed: {e}"
+        try:
+            atts = build_attachments(args.get("files"))
+        except FileNotFoundError as e:
+            return f"error: {e}"
+        atts += args.get("attachments") or []
+        header = f"session_id={sid}\nworkspace={cwd}"
+        if temporary:
+            header += (
+                f"\n(temporary conversation: auto-discarded after "
+                f"{_config.TEMP_TTL}s of inactivity or when the bridge exits; "
+                f"subagent workers need no manual cleanup)"
+            )
+        if project:
+            header += "\n(project conversation: ZCode edits files inside this project; "
+            header += "the desktop app shows it under the project)"
+        body = run_turn(
+            sid, args.get("text", ""), atts or None, args.get("wait", True),
+            _effective_timeout(args),
         )
-    if project:
-        header += "\n(project conversation: ZCode edits files inside this project; "
-        header += "the desktop app shows it under the project)"
-    body = run_turn(
-        sid, args.get("text", ""), atts or None, args.get("wait", True),
-        _effective_timeout(args),
-    )
-    return f"{header}\n{body}"
+        return f"{header}\n{body}"
+    finally:
+        if temporary:
+            ephemeral.end(sid)
 
 
 def tool_zcode_session_send(args: dict) -> str:
@@ -483,9 +491,10 @@ def tool_zcode_session_set_model(args: dict) -> str:
         available = _ensure_catalogue()
     except RuntimeError as e:
         return f"error: {e}"
+    registry = provider_registry()
     try:
         selection = parse_model_selector(
-            args["model"], available, _aliases_for(available), provider_registry()
+            args["model"], available, _aliases_for(available, registry), registry
         )
     except ValueError as e:
         return f"error: {e}"
@@ -619,7 +628,8 @@ def tool_zcode_session_discard(args: dict) -> str:
         pass
     deleted = discard_session(sid)
     total_deleted = sum(deleted.values())
-    SERVER.monitors.pop(sid, None)
+    with SERVER._monitors_lock:
+        SERVER.monitors.pop(sid, None)
     ephemeral.forget(sid)
     return (
         f"session_id={sid}\ndiscarded: {total_deleted} rows permanently deleted "
