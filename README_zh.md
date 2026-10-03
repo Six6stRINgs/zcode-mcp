@@ -2,154 +2,157 @@
 
 [English](README.md) | 中文
 
-ZCode 是个跑 agent 的好地方，但你的主力 agent 多半住在 Codex 或 Claude Code 里。zcode-mcp 用 MCP 把两边接起来：你的 agent 直接开 ZCode 对话、派活、盯着模型写、把结果拿回来。这些对话在 ZCode 桌面端里和普通对话没有任何区别，可以随时接着聊——不是藏在角落里的影子会话。
+ZCode 的 Model Context Protocol (MCP) 桥接服务。
 
-桥走的是 ZCode 自带的 app-server 协议（桌面 App 同一条通道），协议里的坑它都已经替你踩过了；派出去的一次性 subagent，干完活会自己收拾干净。
+将本地 ZCode 运行环境接入外部 AI Agent 工具链（如 Codex、Claude Code 等）。支持多轮会话驱动、子任务派发、流式输出观测、动态模型切换与临时会话自动清理，所有会话与 ZCode 桌面端实时双向同步。
 
-Windows 优先。实测环境 ZCode 0.16.9（桌面端 3.14.4）。Python ≥ 3.9，纯标准库。MIT。
+---
 
-## 快速开始
+## 核心特性
 
-需要 Python ≥ 3.9、Node.js（ZCode 桌面端自带那个就行）、一个已登录的 ZCode 桌面端或 CLI 0.16.x。
+- **桌面端双向同步**：通过 ZCode 本地 app-server 协议通信，创建的会话与桌面端完全一致，可在桌面端即时查看与接管。
+- **子任务自动回收**：支持临时会话生命周期管理，任务完成后自动回收资源，避免无用会话堆积。
+- **全模型调度**：支持多 Provider 动态切换与 Reasoning 思考档位配置。
+- **状态观测与流式捕获**：提供实时的 Turn 执行状态检测、流式内容轮询及超时间隔防护。
+- **工作区上下文集成**：支持直接绑定已有项目仓库，提供 Git 状态与变更 Diff 查询。
+- **轻量零依赖**：基于 Python 3.9+ 纯标准库实现，无外部第三方库强依赖。
 
-在 Codex 里注册：
+## 运行环境
 
+- **Python**：≥ 3.9
+- **Node.js**：系统已安装或使用 ZCode 桌面端内置运行时
+- **ZCode**：已安装并完成登录的 ZCode 桌面端或 CLI（推荐 0.16.x 及以上）
+- **操作系统**：Windows 优先（默认自动探测标准安装路径），核心逻辑跨平台支持
+
+## 接入配置
+
+在 MCP 宿主客户端中添加服务配置：
+
+### Codex
 ```bash
 codex mcp add zcode-mcp -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp
 ```
 
-uvx 会自己拉仓库、建隔离环境、跑起来，不需要手动装任何东西。想固定版本就在 git URL 后面加 `@<tag>`。Claude Code 和其他 MCP 客户端拿同一条命令注册成 stdio server 即可（`claude mcp add zcode-mcp -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp`）。
-
-然后给你的 agent 派第一件活：
-
-```json
-{"name": "zcode_session_new", "arguments": {"text": "列出这个工作区里的 Python 文件并计数"}}
+### Claude Code
+```bash
+claude mcp add zcode-mcp -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp
 ```
 
-```
-session_id=sess_8b0d1110-4d8c-4071-845e-69ceba860e9f
-workspace=D:\work\sandbox
-共有 3 个 Python 文件：agent.py、fetch.py、report.py。
-```
+若 ZCode 安装在非默认目录，可通过环境变量 `ZCODE_CJS` 指定其 `zcode.cjs` 核心入口路径。在无头自动化环境中执行时，需根据宿主客户端策略配置相应的工具审批权限。
 
-打开 ZCode 桌面端看一眼：对话就在那里，两边都能接着聊。
+## 内置技能 (Skills)
 
-第一天最容易撞上的两件事：
+仓库内置 3 个标准化 SKILL.md，用于为 MCP Agent 提供编排与调度规则：
 
-- ZCode 装在非默认位置？把 `ZCODE_CJS` 指向它的 `zcode.cjs` 入口（见下文配置）。
-- 无头 `codex exec` 默认审批策略会拒掉 MCP 调用。自动化场景用 `--dangerously-bypass-approvals-and-sandbox`（先想清楚你的 agent 能碰什么）或 `--approve-for-me`；交互式 Codex 问一次就放行。
-
-## 技能（Skills）
-
-给 18 个工具各写一遍正确的调用方式，是 agent 该干的活，不是你的。仓库自带三份 SKILL.md，agent 读完就会用（Codex 支持，其他认 SKILL.md 的客户端同样适用）：
-
-| 技能 | agent 能学会什么 |
+| 技能名称 | 定位与能力 |
 | --- | --- |
-| `zcode-mcp` | 全套手册：每个工具、模型选择、权限流程、什么场景用什么 |
-| `zcode-subagent` | 把 ZCode 当工人派活：派工模式、验收循环、收拾残局 |
-| `zcode-code-reviewer` | 只读代码评审 |
+| `zcode-mcp` | 完整工具使用规约、模型选择器语法、权限审批流与参数规范 |
+| `zcode-subagent` | ZCode 任务派发规范、执行与验收循环、临时会话自动回收流程 |
+| `zcode-code-reviewer` | 基于 Git Diff 的只读代码评审规范 |
 
-装进 Codex：
-
+安装至 Codex：
 ```bash
 # macOS / Linux
 cp -r skills/* ~/.codex/skills/
-```
 
-```powershell
-# Windows（PowerShell）
+# Windows PowerShell
 Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills\
 ```
 
-## 工具
+## 工具列表
 
-18 个工具：3 个独立使用，其余每个都围着一段对话转。
+服务共提供 18 个 MCP 工具，划分为独立全局工具与会话操作工具两类。
 
-独立工具：
+### 独立全局工具
 
-| 工具 | 干什么 |
+| 工具名称 | 功能描述 |
 | --- | --- |
-| `zcode_models` | 实时模型目录，带 provider 显示名和 reasoning 档位——顺带列出会话碰不到的桌面端来源 |
-| `zcode_quota` | 一次调用拿回所有套餐额度窗口和 Start Plan token 余额 |
-| `zcode_health` | 桥、Node.js、ZCode CLI、app-server 各自活没活着 |
+| `zcode_models` | 查询当前可用模型目录、Provider 显示名、支持的 Reasoning 档位及桌面端专用非编排模型状态 |
+| `zcode_quota` | 获取当前账户套餐额度窗口使用情况与 Start Plan 每日 Token 余额 |
+| `zcode_health` | 检查 MCP 桥接服务、Node.js、ZCode CLI 及 app-server 进程连通性 |
 
-会话工具，全部要传 `session_id`：
+### 会话操作工具
 
-| 工具 | 干什么 |
+所有会话工具均基于 `session_id` 句柄进行交互：
+
+| 工具名称 | 功能描述 |
 | --- | --- |
-| `zcode_session_new` | 开对话、发首条消息；默认等回复回来，`wait: false` 除外 |
-| `zcode_session_send` | 续聊，可带附件 |
-| `zcode_session_status` | 对话此刻在干嘛：当前模型、turn 状态、等谁审批 |
-| `zcode_session_output` | 模型已经写到哪了，turn 跑着的时候轮询看 |
-| `zcode_session_result` | 最终结果打包成一份：状态、回复、错误、模型 |
-| `zcode_session_diff` | 对话工作区的 git 状态、改了哪些文件、限长 diff |
-| `zcode_session_read` | 最近消息历史，限空闲会话 |
-| `zcode_session_wait` | 等运行中的 turn 结束，把回复交给你 |
-| `zcode_session_stop` | 掐断运行中的 turn |
-| `zcode_session_set_model` | 换模型，下一条消息生效 |
-| `zcode_session_permissions` | 列出待决的权限 / 用户输入请求 |
-| `zcode_session_decide` | 答一个，turn 从暂停处接着跑 |
-| `zcode_session_archive` | 藏起来但什么都不删；`unarchive: true` 找回来 |
-| `zcode_session_discard` | 永久删除，先预演 |
+| `zcode_session_new` | 创建新对话并发送首条消息；支持项目目录绑定、模型指定、权限模式、附件传递及临时标记 |
+| `zcode_session_send` | 向指定会话发送后续消息与附件 |
+| `zcode_session_list` | 列出全部工作区的会话摘要，包含会话 ID、状态、模式、标题，支持查询归档会话 |
+| `zcode_session_status` | 查询指定会话的当前状态、运行模型、Turn 阶段与待决权限 |
+| `zcode_session_output` | 轮询当前或最近已完成 Turn 的流式生成文本 |
+| `zcode_session_result` | 获取 Turn 的综合结算结果，包含执行状态、最终回复文本、报错详情与模型信息 |
+| `zcode_session_diff` | 获取会话关联工作区的 Git 变更文件列表与上下文 Diff 内容 |
+| `zcode_session_read` | 在会话空闲时读取最近的消息历史记录 |
+| `zcode_session_wait` | 阻塞等待正在执行的 Turn 结束并返回结果，受工具调用超时上限控制 |
+| `zcode_session_stop` | 强制终止当前会话中正在运行的 Turn |
+| `zcode_session_set_model` | 修改会话生效模型，于下一轮消息交互时起效 |
+| `zcode_session_permissions` | 列出当前会话中挂起的权限审批或交互输入请求 |
+| `zcode_session_decide` | 提交对挂起权限的审批决定（允许、拒绝、升级、修改）或答复交互输入 |
+| `zcode_session_archive` | 切换会话归档状态，隐藏显示而不删除历史数据 |
+| `zcode_session_discard` | 物理删除会话记录；默认执行预检并返回受影响行数，需显式确认生效 |
 
-模型选择器三种写法：裸 `modelId`（全目录唯一时才行）、`providerId/modelId`、`ProviderName/modelId`（比如 `CPA/gpt-5.6-luna`），后面都能接 `$reasoningLevel`（比如 `GLM-5.3-Flash$high`）。不给档位的话，模型支持就选 `high`。目录用 `zcode_models` 随时看。
+## 规格说明
 
-`session_id` 之外值得知道的参数：
+### 模型选择器语法
+模型参数统一遵循以下命名格式：
+```
+[Provider/]<ModelID>[$ReasoningLevel]
+```
+- **匹配规则**：支持使用全局唯一 ModelID、`providerId/modelId`（配置标识符）或 `ProviderName/modelId`（展示名）。
+- **思考档位**：支持通过 `$<level>` 指定 Reasoning 强度（如 `$high`, `$medium`, `$low`）；未显式指定且模型支持思考档位时，默认启用最强档位。
 
-- `zcode_session_new`：`project` 把对话绑到已有仓库，改动直接落盘；`temporary` 让对话用完自清——闲置 10 分钟或桥退出时自动删掉——和 `project` 可以一起用；`model` 和 `mode`（`plan`/`build`/`edit`/`yolo`/`auto`）管用什么脑子、要什么权限；`files` 带本地文件；`wait: false` 发完就走。所有阻塞调用都受 `ZCODE_MCP_TOOL_BUDGET`（240s）管着，到点返回可续等的 timeout，用 `zcode_session_wait` 接着等。
-- `zcode_session_send`：续聊的附件和等待行为同上。
-- `zcode_session_decide`：拿 `zcode_session_permissions` 给的 `request_id`，加 `approve: true/false` 或 `decision`（`allow`/`deny`/`escalate`/`modify`），可附 `reason`。
-- `zcode_session_wait`：超时说明里会讲清 turn 此刻是流式输出、思考还是卡住。
-- `zcode_session_discard`：不带 `confirm: true` 只报行数，不动真格。
+### 临时会话管理
+- **自动清理**：在创建会话时指定 `temporary: true`，后台守护进程将在会话闲置达到超时阈值后自动执行物理删除，并在桥接服务退出时清理所有存活的临时会话。
+- **运行保护**：存在正在执行的 Turn 或正在处理的工具调用时，会话受到保护不会被回收。每次工具调用均会重置闲置计时。
 
-## 配置
+### 超时控制
+- 单次同步阻塞调用受 `ZCODE_MCP_TOOL_BUDGET` 控制。在达到宿主客户端超时阈值前，桥接服务会主动返回带有当前执行状态的中间结果，支持通过 `zcode_session_wait` 继续等待。
+- 创建及发送接口支持通过 `wait: false` 切换为非阻塞模式，转由后台异步执行。
 
-| 变量 | 默认值 | 用途 |
+## 环境变量配置
+
+| 环境变量 | 默认值 | 说明 |
 | --- | --- | --- |
-| `ZCODE_CJS` | 自动探测 | ZCode CLI 入口路径（`<安装目录>/resources/glm/zcode.cjs`），未设置时扫描常见安装位置。可设全局，也可按服务注册：`codex mcp add zcode-mcp --env ZCODE_CJS="<安装目录>/resources/glm/zcode.cjs" -- uvx --from "git+https://github.com/Six6stRINgs/zcode-mcp" zcode-mcp` |
-| `ZCODE_MCP_WORKSPACE` | `<仓库>/sandbox` | `zcode_session_new` 的默认工作区 |
-| `ZCODE_MCP_DEFAULT_MODEL` | `bigmodel-api/GLM-5.3-Flash` | `zcode_session_new` 不传 `model` 时用的模型 |
-| `ZCODE_MCP_TOOL_BUDGET` | `240` | 单次阻塞工具调用的时间上限（秒）。Codex 会在 ~300s 掐断 tools/call，桥赶在那之前返回可续等的 timeout |
-| `ZCODE_MCP_TEMP_TTL` | `600` | `temporary` 对话闲置多少秒后自动删除。运行中的 turn 不会被回收；`0` 关闭 |
-| `ZCODE_MCP_DEBUG` | 关 | 详细协议日志（`bridge.log`、`child_dump.log`） |
-| `ZCODE_MCP_NO_WARMUP` | 关 | 跳过 app-server 预热 |
-| `ZCODE_HOME` | `~/.zcode` | ZCode 共享存储根目录 |
-| `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | 覆盖会话库路径 |
-| `ZCODE_MCP_TASKS_INDEX` | `$ZCODE_HOME/v2/tasks-index.sqlite` | 覆盖任务索引路径 |
-| `ZCODE_MCP_CREDENTIALS` | `$ZCODE_HOME/v2/credentials.json` | 覆盖 OAuth 凭据存储路径（额度） |
-| `ZCODE_MCP_ZCODE_CONFIG` | `$ZCODE_HOME/v2/config.json` | 覆盖 provider 配置路径（Start Plan 余额） |
-| `ZCODE_MCP_PROVIDER_CONFIG` | `$ZCODE_HOME/v2/provider_config.json` | 覆盖 app-server provider 注册表路径（模型显示名） |
-| `ZCODE_MCP_APP_VERSION` | `3.14.4` | 套餐额度端点携带的 `app_version` |
+| `ZCODE_CJS` | 自动探测 | ZCode CLI 入口路径（`<安装目录>/resources/glm/zcode.cjs`） |
+| `ZCODE_MCP_WORKSPACE` | `<仓库根目录>/sandbox` | 新建会话未指定项目时的默认沙箱路径 |
+| `ZCODE_MCP_DEFAULT_MODEL` | `bigmodel-api/GLM-5.3-Flash` | 新建会话未指定模型时的默认模型标识 |
+| `ZCODE_MCP_TOOL_BUDGET` | `240` | 单次阻塞工具调用的最大等待秒数 |
+| `ZCODE_MCP_TEMP_TTL` | `600` | 临时会话自动回收的闲置判定秒数（设为 `0` 则禁用自动清理） |
+| `ZCODE_MCP_DEBUG` | 停用 | 启用协议通信详细调试日志输出 |
+| `ZCODE_MCP_NO_WARMUP` | 停用 | 跳过服务启动时的 app-server 预热连接 |
+| `ZCODE_HOME` | `~/.zcode` | ZCode 用户数据与配置存储根目录 |
+| `ZCODE_MCP_SESSION_DB` | `$ZCODE_HOME/cli/db/db.sqlite` | 会话数据库绝对路径覆盖 |
+| `ZCODE_MCP_TASKS_INDEX` | `$ZCODE_HOME/v2/tasks-index.sqlite` | 桌面端任务索引数据库路径覆盖 |
+| `ZCODE_MCP_CREDENTIALS` | `$ZCODE_HOME/v2/credentials.json` | 额度认证凭据路径覆盖 |
+| `ZCODE_MCP_ZCODE_CONFIG` | `$ZCODE_HOME/v2/config.json` | 用户全局配置文件路径覆盖 |
+| `ZCODE_MCP_PROVIDER_CONFIG` | `$ZCODE_HOME/v2/provider_config.json` | Provider 注册表文件路径覆盖 |
+| `ZCODE_MCP_APP_VERSION` | `3.14.4` | 请求套餐额度接口时使用的客户端版本标识 |
 
-## 工作原理
-
-桥拉起一个 `zcode app-server` 子进程，说 ZCode Protocol：stdio 上的换行分隔 JSON，不握手。一段对话就是 `session/create`、`session/subscribe`、`session/send` 三步，回复从 `turn.completed` 事件里来。
+## 运行架构
 
 ```
-MCP 客户端 (Codex / Claude / 你的 agent)         ZCode 桌面端
-        │  MCP (stdio JSON-RPC)                        ▲
-        ▼                                              │ 共享会话存储
-zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server（桥拉起）
+MCP 宿主客户端 (Codex / Claude Code / Agent)
+       │
+       │ MCP 协议 (stdio JSON-RPC)
+       ▼
+zcode-mcp 桥接服务
+       │
+       │ ZCode 内部协议 (NDJSON / stdio)
+       ▼
+zcode app-server
+       │
+       ▼
+本地 SQLite 会话存储与工作区文件 ◄──► ZCode 桌面客户端
 ```
 
-这个协议是 ZCode 的内部协议，没对外承诺稳定，而且坑不少。桥替你踩过了：
+## 注意事项
 
-- turn 没跑完时调 `session/read` 会把 turn 悄悄弄死——桥绝不这么干；
-- subscribe 必须赶在 send 前面，晚一步整个 turn 就错过了；
-- `session/list` 在模型重试窗口里谎报 `idle`——完成只认事件；
-- 服务端会反过来问问题（运行时偏好、插件身份头），桥都接住了，桌面 App 不开也能把会话跑起来。
-
-归档和删除是直接操作 ZCode 的两个 SQLite 库——协议里压根没有这两个方法。
-
-模型从哪来：会话能用哪些 provider，由 app-server 注册表（`~/.zcode/v2/provider_config.json`）说了算。你自己加的 provider 沿用配置里的 id（通常是个 UUID），BigModel 系的通道都折叠成一个 `bigmodel-api`。桌面端的账号型来源（BigModel 个人、Start Plan、Z.ai）绑着你的桌面登录，进不了这个注册表——`zcode_models` 会列出来供参考，你真去选它会讲清为什么不行。
-
-## 已知边界
-
-- **桌面账号型额度的 token，MCP 这边一个都用不了。** Start Plan、BigModel 个人、Z.ai 的模型进不了无头会话的注册表，这些额度不管剩多少，都只能在桌面 App 自己的对话里花。纯 API key 的 provider 不一样：在 ZCode 里加一个，MCP 里就能当普通 provider 用。
-- 需要本地装 ZCode。app-server 协议没对外承诺稳定，版本升级可能变动（实测 0.16.9 / 桌面端 3.14.4）。
-- Windows 优先：默认路径按 Windows 版 ZCode 假设，其余代码全平台可移植。
-- 桥创建的会话里，预置官方插件（联网搜索这类）以空身份启动，模型和本地工具不受影响。
-- 桌面端正开着的对话别 discard；删运行中的会话是尽力而为。`zcode_session_discard` 不可恢复，先预演。桥要是没走正常退出（崩溃、被杀），它名下的临时对话会留在库里且不带标记。
+- **桌面登录专属模型限制**：绑定于桌面端特定登录身份的账号源模型无法在无头会话中直接调度；需使用配置有有效独立 API 密钥的 Provider。
+- **依赖本地环境**：依赖本地安装且处于登录状态的 ZCode 桌面端或 CLI 运行时。
+- **物理删除不可逆**：`zcode_session_discard` 为永久性物理删除操作。
+- **未正常退出清理**：若桥接服务进程异常终止，未及清理的临时会话将保留在本地数据库中。
 
 ## 许可证
 
