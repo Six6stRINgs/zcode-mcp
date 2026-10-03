@@ -149,7 +149,7 @@ Where models come from: what a session can address is decided by the app-server 
 - Requires a local ZCode install. The app-server protocol is not a published API and may change between ZCode versions (tested against 0.16.9 / desktop 3.14.4).
 - Windows-first: default paths assume a Windows ZCode install. Everything else is portable standard library.
 - Preset official plugin MCPs (web search and friends) start without desktop credentials in bridge-created sessions; the model and local tools are unaffected.
-- Don't discard a conversation the desktop app currently has open, and expect discarding a running session to be best-effort. `zcode_session_discard` is irreversible; dry-run first.
+- Don't discard a conversation the desktop app currently has open, and expect discarding a running session to be best-effort. `zcode_session_discard` is irreversible; dry-run first. And if the bridge dies without a clean exit (crash, kill), its temporary conversations stay behind unmarked.
 
 ## License
 

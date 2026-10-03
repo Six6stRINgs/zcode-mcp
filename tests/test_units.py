@@ -271,6 +271,26 @@ class ProviderAliasTest(unittest.TestCase):
         self.assertIn("not addressable", str(ctx.exception))
         self.assertIn("builtin:bigmodel-start-plan", str(ctx.exception))
 
+    def test_guidance_branches_on_registry_info(self):
+        from zcode_mcp.models import build_provider_aliases, parse_model_selector
+
+        available = [{"provider_id": "uuid-1", "model_id": "gpt-x"}]
+        # a custom (provider_config) provider missing from the catalogue is
+        # NOT told to "add it as a custom provider" — it already is one
+        reg = {"uuid-2": {"name": "Broken", "origin": "provider_config"}}
+        aliases = build_provider_aliases(available, reg)
+        with self.assertRaises(ValueError) as ctx:
+            parse_model_selector("Broken/x", available, aliases, reg)
+        self.assertIn("no models available", str(ctx.exception))
+        self.assertNotIn("add it as a custom provider", str(ctx.exception))
+        # a disabled desktop-layer provider is told to enable it
+        reg2 = {"builtin:zai": {"name": "Z.ai", "origin": "config", "enabled": False}}
+        aliases2 = build_provider_aliases(available, reg2)
+        with self.assertRaises(ValueError) as ctx:
+            parse_model_selector("Z.ai/x", available, aliases2, reg2)
+        self.assertIn("disabled", str(ctx.exception))
+        self.assertIn("enable it", str(ctx.exception))
+
     def test_ambiguous_desktop_only_name_carries_guidance(self):
         from zcode_mcp.models import build_provider_aliases, parse_model_selector
 

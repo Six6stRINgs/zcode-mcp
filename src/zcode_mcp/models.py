@@ -156,14 +156,19 @@ def build_provider_aliases(
 
 
 def _resolve_provider(
-    provider_id: str, available: list[dict], aliases: dict[str, list[str]] | None
+    provider_id: str,
+    available: list[dict],
+    aliases: dict[str, list[str]] | None,
+    registry: dict[str, dict] | None = None,
 ) -> str:
     """Map a selector's provider part to a canonical providerId.
 
     Exact (then case-insensitive) ids pass through untouched; names resolve
     via ``aliases``. Raises when a name is unknown or ambiguous, and points
     at the desktop picker for registry providers the session layer can't
-    address.
+    address. ``registry`` (from :func:`provider_registry`) sharpens the
+    guidance: a provider_config entry says "no models available", a disabled
+    config entry says "enable it first".
     """
     ids = {m.get("provider_id") for m in available if m.get("provider_id")}
     if not provider_id or provider_id in ids:
@@ -186,6 +191,19 @@ def _resolve_provider(
     if len(candidates) == 1:
         pid = candidates[0]
         if pid not in ids:
+            info = (registry or {}).get(pid) or {}
+            if info.get("origin") == "provider_config":
+                raise ValueError(
+                    f"provider '{provider_id}' ({pid}) is registered in ZCode "
+                    "but currently has no models available to sessions (no "
+                    "models configured, or the endpoint is unreachable)"
+                )
+            if info.get("enabled") is False:
+                raise ValueError(
+                    f"provider '{provider_id}' ({pid}) exists in ZCode but is "
+                    "disabled — enable it in the ZCode desktop app to make it "
+                    "session-addressable"
+                )
             raise ValueError(
                 f"provider '{provider_id}' ({pid}) exists in ZCode but is not "
                 "addressable from MCP sessions (desktop-managed account source); "
@@ -210,7 +228,12 @@ def _resolve_provider(
     )
 
 
-def parse_model_selector(selector: str, available: list[dict], aliases: dict[str, list[str]] | None = None) -> dict:
+def parse_model_selector(
+    selector: str,
+    available: list[dict],
+    aliases: dict[str, list[str]] | None = None,
+    registry: dict[str, dict] | None = None,
+) -> dict:
     """Parse ``modelId`` / ``providerId/modelId`` / ``providerId/modelId$level``.
 
     The provider part may be a raw providerId (UUID or ``bigmodel-api``) or a
@@ -232,7 +255,7 @@ def parse_model_selector(selector: str, available: list[dict], aliases: dict[str
     if "/" in selector:
         provider_id, model_id = selector.split("/", 1)
         selection = _selection(
-            _resolve_provider(provider_id.strip(), available, aliases),
+            _resolve_provider(provider_id.strip(), available, aliases, registry),
             model_id.strip(),
             level,
         )

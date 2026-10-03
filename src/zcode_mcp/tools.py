@@ -114,7 +114,9 @@ def tool_zcode_session_new(args: dict) -> str:
     if selector:
         avail = _available_from_cache() or []
         try:
-            selection = parse_model_selector(selector, avail, _aliases_for(avail))
+            selection = parse_model_selector(
+                selector, avail, _aliases_for(avail), provider_registry()
+            )
         except ValueError as e:
             if args.get("model"):
                 return f"error: {e}"
@@ -483,7 +485,7 @@ def tool_zcode_session_set_model(args: dict) -> str:
         return f"error: {e}"
     try:
         selection = parse_model_selector(
-            args["model"], available, _aliases_for(available)
+            args["model"], available, _aliases_for(available), provider_registry()
         )
     except ValueError as e:
         return f"error: {e}"

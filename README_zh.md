@@ -149,7 +149,7 @@ zcode-mcp  ──ZCode Protocol NDJSON/stdio──►  zcode app-server（桥拉
 - 需要本地装 ZCode。app-server 协议没对外承诺稳定，版本升级可能变动（实测 0.16.9 / 桌面端 3.14.4）。
 - Windows 优先：默认路径按 Windows 版 ZCode 假设，其余代码全平台可移植。
 - 桥创建的会话里，预置官方插件（联网搜索这类）以空身份启动，模型和本地工具不受影响。
-- 桌面端正开着的对话别 discard；删运行中的会话是尽力而为。`zcode_session_discard` 不可恢复，先预演。
+- 桌面端正开着的对话别 discard；删运行中的会话是尽力而为。`zcode_session_discard` 不可恢复，先预演。桥要是没走正常退出（崩溃、被杀），它名下的临时对话会留在库里且不带标记。
 
 ## 许可证
 
