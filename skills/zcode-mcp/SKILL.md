@@ -108,8 +108,14 @@ contents into `text`.
   API-key endpoints are a different matter — added as custom providers they
   show up in `zcode_models` and work normally.
 - `zcode_quota {}` — plan windows (used / remaining / percentage / next
-  reset). Needs the optional `cryptography` package. Check before long
-  tasks; if a provider's credentials are cooling down, switch models.
+  reset). Needs the optional `cryptography` package. Check before long tasks.
+- **Never switch models on your own initiative.** If the model in use runs
+  out of quota mid-task (the worker reports credential cooldown, usage
+  limit, or insufficient balance), stop there and ask the user which model
+  to continue on. Other providers' models may run on plans or balances the
+  user never offered to spend. Switch only after the user names a model or
+  explicitly authorizes the switch — then `zcode_session_set_model` +
+  `zcode_session_send` to resume.
 
 ### Observing a running turn
 
@@ -136,8 +142,10 @@ Statuses you can see from a blocked/collected turn:
   its context.
 - Lost track of sessions → `zcode_session_list` (add `include_archived: true` if
   needed).
-- A worker reports credential cooldown / usage limit →
-  `zcode_session_set_model` to another provider and `zcode_session_send` to retry.
+- A worker reports credential cooldown / usage limit → STOP. Do not retry
+  on another model; report the exhausted model to the user and ask which
+  one to continue on. Switch only on their explicit instruction (see the
+  rule under Model selection & quota).
 - Before a long expensive task → `zcode_quota` to check remaining windows.
 
 ## Sub-skills

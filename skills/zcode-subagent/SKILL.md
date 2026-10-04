@@ -123,8 +123,16 @@ ZCode starts with zero context about your conversation. Include in `text`:
 
 - Dispatch with `zcode_session_new {project: …, model: "GLM-5.3-Flash", …}` to pin a
   worker's model; levels via `$high` / `$low` (default prefers `high`).
-- `zcode_session_set_model {session_id, model}` mid-task when a provider's
-  credentials cool down or you want a stronger/cheaper brain for a phase.
+- **Quota exhaustion mid-task is a stop-and-ask event.** When a worker's
+  model runs out of quota or its credentials cool down, do NOT pick
+  another model yourself — pause and ask the user which model to continue
+  on. Switch only when the user names one or explicitly authorized the
+  switch in advance (`zcode_session_set_model` + `zcode_session_send` to
+  resume). Unrequested switches may burn plans/balances the user never
+  offered.
+- `zcode_session_set_model {session_id, model}` is otherwise a
+  user-requested operation (e.g. they want a stronger/cheaper brain for a
+  phase), not a cost-saving move you make on your own.
 - `zcode_quota {}` before committing to several long workers.
 
 ## Non-yolo workers (interactive permissions)
@@ -147,7 +155,9 @@ blocking call open.
 ## Failure handling
 
 - `status=failed (turn failed: …)` → read the error; usually re-dispatch with
-  a narrower task or fixed input.
+  a narrower task or fixed input. If the error is quota exhaustion or
+  credential cooldown, stop and ask the user which model to continue on —
+  never switch models on your own (see Model choice per worker).
 - `status=waiting_input` → ZCode asked a question; answer via `zcode_session_send`.
 - `status=timeout` → still running or stuck; check `zcode_session_output` to judge,
   then `zcode_session_wait` again or `zcode_session_stop`.
