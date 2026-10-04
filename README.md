@@ -150,6 +150,7 @@ Local SQLite Storage & Workspace Files ◄──► ZCode Desktop App
 ## Considerations
 
 - **Desktop-Only Account Sources**: Models tied exclusively to desktop account sources cannot be addressed in headless sessions; use providers with standard API access.
+- **No Autonomous Model Switching**: When the model in use exhausts its quota mid-task, the agent must pause and ask the user which model to continue on; switching models without the user's explicit instruction is forbidden. The bundled skills enforce this rule.
 - **Local Environment**: Requires a local ZCode desktop or CLI installation with an active login session.
 - **Permanent Deletion**: The `zcode_session_discard` tool irreversibly deletes conversation data.
 - **Abnormal Termination**: If the bridge process is forcefully terminated, temporary sessions created during the run remain in the local database.
