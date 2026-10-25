@@ -30,12 +30,15 @@ import itertools
 import json
 import os
 import queue
+import shlex
 import shutil
+import socket
 import subprocess
 import threading
 import time
 from typing import Any
 
+from . import config
 from .config import (
     DEBUG,
     DEFAULT_WS,
@@ -69,11 +72,102 @@ def _resolve_node() -> str:
 NODE_EXE = _resolve_node()
 
 
+class _ProcTransport:
+    """NDJSON over a subprocess's stdin/stdout (local spawn or ssh pipe)."""
+
+    def __init__(self, argv: list[str], desc: str) -> None:
+        self.desc = desc
+        self._proc = subprocess.Popen(
+            argv,
+            stdin=subprocess.PIPE,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            bufsize=1,
+        )
+
+    @property
+    def alive(self) -> bool:
+        return self._proc.poll() is None
+
+    def read_line(self) -> str:
+        return self._proc.stdout.readline()  # "" at EOF
+
+    def write_line(self, line: str) -> None:
+        self._proc.stdin.write(line + "\n")
+        self._proc.stdin.flush()
+
+    def close(self) -> None:
+        if self._proc.poll() is None:
+            try:
+                self._proc.kill()
+            except OSError:
+                pass
+
+
+class _TcpTransport:
+    """NDJSON over a raw TCP socket to a remotely-exposed app-server."""
+
+    def __init__(self, host: str, port: int, desc: str) -> None:
+        self.desc = desc
+        self._sock = socket.create_connection((host, port), timeout=30)
+        self._sock.settimeout(None)
+        self._rfile = self._sock.makefile(
+            "r", encoding="utf-8", errors="replace", newline="\n"
+        )
+        self._open = True
+
+    @property
+    def alive(self) -> bool:
+        return self._open
+
+    def read_line(self) -> str:
+        try:
+            line = self._rfile.readline()
+        except OSError:
+            self._open = False
+            return ""
+        if not line:
+            self._open = False
+        return line
+
+    def write_line(self, line: str) -> None:
+        self._sock.sendall((line + "\n").encode("utf-8"))
+
+    def close(self) -> None:
+        self._open = False
+        try:
+            self._sock.shutdown(socket.SHUT_RDWR)
+        except OSError:
+            pass
+        try:
+            self._sock.close()
+        except OSError:
+            pass
+
+
+def _remote_appserver_command() -> str:
+    """The shell command the remote host runs to start app-server."""
+    ws = config.REMOTE_WORKSPACE or "."
+    remote_cjs = config.REMOTE_CJS
+    if remote_cjs:
+        entry = (
+            f"node {shlex.quote(remote_cjs)}"
+            if remote_cjs.endswith(".cjs")
+            else shlex.quote(remote_cjs)
+        )
+    else:
+        entry = "zcode"
+    return f"{entry} app-server --cwd {shlex.quote(ws)}"
+
+
 class AppServer:
     """One persistent ``zcode app-server`` child; thread-safe request()."""
 
     def __init__(self) -> None:
-        self._proc: subprocess.Popen | None = None
+        self._transport: "_ProcTransport | _TcpTransport | None" = None
         self._spawn_lock = threading.Lock()
         self._write_lock = threading.Lock()  # stdin writes come from 2 threads
         self._pending: dict[int, queue.Queue] = {}
@@ -93,72 +187,90 @@ class AppServer:
     # -- lifecycle ---------------------------------------------------------
 
     def _spawn(self) -> None:
-        zcode_cjs = resolve_zcode_cjs()  # may raise with actionable guidance
-        log(f"spawning app-server (cwd={DEFAULT_WS}, zcode.cjs={zcode_cjs})")
+        remote_mode = config.REMOTE_MODE
+        if remote_mode == "tcp":
+            host, _, port = config.REMOTE_TCP.rpartition(":")
+            if not host or not port.isdigit():
+                raise RuntimeError(
+                    f"ZCODE_MCP_REMOTE_TCP must be 'host:port', got: {config.REMOTE_TCP!r}"
+                )
+            desc = f"tcp {host}:{port}"
+            log(f"connecting to remote app-server ({desc})")
+            transport: "_ProcTransport | _TcpTransport" = _TcpTransport(
+                host, int(port), desc
+            )
+        elif remote_mode == "ssh":
+            remote_cmd = _remote_appserver_command()
+            argv = (
+                ["ssh"]
+                + shlex.split(config.REMOTE_SSH_ARGS)
+                + [config.REMOTE_SSH, "--", remote_cmd]
+            )
+            desc = f"ssh {config.REMOTE_SSH}"
+            log(f"spawning remote app-server over ssh ({desc}, cmd={remote_cmd!r})")
+            transport = _ProcTransport(argv, desc)
+        else:
+            zcode_cjs = resolve_zcode_cjs()  # may raise with actionable guidance
+            desc = "local"
+            log(f"spawning app-server (cwd={DEFAULT_WS}, zcode.cjs={zcode_cjs})")
+            os.makedirs(DEFAULT_WS, exist_ok=True)
+            transport = _ProcTransport(
+                [NODE_EXE, zcode_cjs, "app-server", "--cwd", DEFAULT_WS], desc
+            )
         t0 = time.time()
-        os.makedirs(DEFAULT_WS, exist_ok=True)
         # a fresh child invalidates every parked interaction from the old one
         with self._interactions_lock:
             self.pending_interactions.clear()
-        self._proc = subprocess.Popen(
-            [NODE_EXE, zcode_cjs, "app-server", "--cwd", DEFAULT_WS],
-            stdin=subprocess.PIPE,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.DEVNULL,
-            text=True,
-            encoding="utf-8",
-            errors="replace",
-            bufsize=1,
-        )
-        log(f"app-server pid={self._proc.pid} spawned in {time.time() - t0:.2f}s")
+        self._transport = transport
+        log(f"app-server transport ready ({desc}) in {time.time() - t0:.2f}s")
         threading.Thread(target=self._reader, daemon=True).start()
         deadline = time.time() + 30
         while time.time() < deadline:
             if getattr(self, "_storage_ready", False):
                 log(f"storage ready after {time.time() - t0:.2f}s")
                 return
-            if self._proc.poll() is not None:
-                raise RuntimeError("app-server exited during startup")
+            if not transport.alive:
+                raise RuntimeError(
+                    f"app-server ({desc}) exited during startup"
+                )
             time.sleep(0.2)
         log("storage readiness wait timed out; continuing anyway")
 
-    def ensure(self) -> subprocess.Popen:
+    def ensure(self) -> "_ProcTransport | _TcpTransport":
         with self._spawn_lock:
-            if self._proc is None or self._proc.poll() is not None:
+            if self._transport is None or not self._transport.alive:
                 self._storage_ready = False
                 self._spawn()
-            return self._proc
+            return self._transport
 
     def shutdown(self) -> None:
-        if self._proc is not None and self._proc.poll() is None:
-            try:
-                self._proc.kill()
-            except OSError:
-                pass
+        if self._transport is not None and self._transport.alive:
+            self._transport.close()
 
     # -- wire ---------------------------------------------------------------
 
     def _send_line(self, obj: dict) -> None:
-        proc = self.ensure()
+        transport = self.ensure()
         line = json.dumps(obj, ensure_ascii=False)
         if DEBUG:
             log(f">>> {line[:300]}")
         try:
             with self._write_lock:
-                proc.stdin.write(line + "\n")
-                proc.stdin.flush()
-        except (BrokenPipeError, OSError):
-            log("write failed; respawning app-server")
+                transport.write_line(line)
+        except (BrokenPipeError, OSError, AttributeError):
+            log("write failed; reopening app-server transport")
             with self._spawn_lock:
-                self._proc = None
-            proc = self.ensure()
+                self._transport = None
+            transport = self.ensure()
             with self._write_lock:
-                proc.stdin.write(line + "\n")
-                proc.stdin.flush()
+                transport.write_line(line)
 
     def _reader(self) -> None:
-        assert self._proc is not None
-        for line in self._proc.stdout:
+        assert self._transport is not None
+        while True:
+            line = self._transport.read_line()
+            if not line:
+                break
             line = line.strip()
             if not line:
                 continue

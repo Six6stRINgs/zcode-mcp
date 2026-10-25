@@ -555,5 +555,189 @@ class EphemeralTest(unittest.TestCase):
         self.assertEqual(self.eph.note("sess_never"), "")
 
 
+class RemoteAppserverCommandTest(unittest.TestCase):
+    """Cloud-link remote command construction."""
+
+    def test_default_command_uses_cli_from_path(self):
+        from zcode_mcp import appserver
+
+        self.assertEqual(
+            appserver._remote_appserver_command(), "zcode app-server --cwd ."
+        )
+
+    def test_cjs_path_gets_node_prefix_and_quoted_workspace(self):
+        import zcode_mcp.config as cfg
+        import zcode_mcp.appserver as appserver
+
+        orig = (cfg.REMOTE_CJS, cfg.REMOTE_WORKSPACE)
+        cfg.REMOTE_CJS = "/opt/zcode/resources/glm/zcode.cjs"
+        cfg.REMOTE_WORKSPACE = "/srv/work"
+        try:
+            self.assertEqual(
+                appserver._remote_appserver_command(),
+                "node /opt/zcode/resources/glm/zcode.cjs app-server --cwd /srv/work",
+            )
+        finally:
+            cfg.REMOTE_CJS, cfg.REMOTE_WORKSPACE = orig
+
+    def test_bare_cli_name_is_quoted_without_node(self):
+        import zcode_mcp.config as cfg
+        import zcode_mcp.appserver as appserver
+
+        orig = (cfg.REMOTE_CJS, cfg.REMOTE_WORKSPACE)
+        cfg.REMOTE_CJS = "zcode17"
+        cfg.REMOTE_WORKSPACE = "."
+        try:
+            self.assertEqual(
+                appserver._remote_appserver_command(), "zcode17 app-server --cwd ."
+            )
+        finally:
+            cfg.REMOTE_CJS, cfg.REMOTE_WORKSPACE = orig
+
+
+class ProcTransportTest(unittest.TestCase):
+    """NDJSON round-trip over a subprocess pipe."""
+
+    def test_roundtrip_and_liveness(self):
+        import sys
+        from zcode_mcp.appserver import _ProcTransport
+
+        code = "import sys\nfor l in sys.stdin:\n    sys.stdout.write(l); sys.stdout.flush()\n"
+        t = _ProcTransport([sys.executable, "-c", code], "test-echo")
+        self.assertTrue(t.alive)
+        t.write_line('{"id": 1}')
+        self.assertEqual(t.read_line().strip(), '{"id": 1}')
+        t.close()
+
+    def test_read_line_empty_after_close(self):
+        import sys
+        from zcode_mcp.appserver import _ProcTransport
+
+        t = _ProcTransport(
+            [sys.executable, "-c", "import time; time.sleep(30)"], "test-idle"
+        )
+        t._proc.kill()
+        t._proc.wait(timeout=5)
+        self.assertFalse(t.alive)
+        self.assertEqual(t.read_line(), "")
+        t.close()
+
+
+class TcpTransportTest(unittest.TestCase):
+    """NDJSON round-trip over a TCP socket (echo server in a thread)."""
+
+    def test_roundtrip_and_eof(self):
+        import socket
+        import threading
+
+        from zcode_mcp.appserver import _TcpTransport
+
+        served = []
+        server = socket.socket()
+        server.bind(("127.0.0.1", 0))
+        server.listen(1)
+        port = server.getsockname()[1]
+
+        def echo():
+            try:
+                conn, _ = server.accept()
+                with conn:
+                    f = conn.makefile("r", encoding="utf-8", newline="\n")
+                    for line in f:
+                        served.append(line)
+                        conn.sendall(line.encode("utf-8"))
+            except OSError:
+                pass
+            finally:
+                server.close()
+
+        threading.Thread(target=echo, daemon=True).start()
+        t = _TcpTransport("127.0.0.1", port, "test-echo")
+        self.assertTrue(t.alive)
+        t.write_line('{"id": 2}')
+        self.assertEqual(t.read_line().strip(), '{"id": 2}')
+        t.close()
+        self.assertFalse(t.alive)
+        self.assertEqual(t.read_line(), "")  # EOF after close
+
+
+class RemoteStoreGuardTest(unittest.TestCase):
+    """Local-store tools refuse to touch the wrong machine over a cloud link."""
+
+    def test_local_mode_allows(self):
+        import zcode_mcp.config as cfg
+        import zcode_mcp.tools as tools
+
+        orig = cfg.REMOTE_MODE
+        cfg.REMOTE_MODE = "local"
+        try:
+            self.assertIsNone(tools._remote_store_guard("t"))
+        finally:
+            cfg.REMOTE_MODE = orig
+
+    def test_remote_mode_refuses(self):
+        import zcode_mcp.config as cfg
+        import zcode_mcp.tools as tools
+
+        orig = cfg.REMOTE_MODE
+        cfg.REMOTE_MODE = "ssh"
+        try:
+            err = tools._remote_store_guard("t")
+            self.assertIn("remote", err)
+            self.assertIn("cloud", err)
+        finally:
+            cfg.REMOTE_MODE = orig
+
+
+class RemoteReaperTest(unittest.TestCase):
+    """The temp reaper closes the runtime session but skips local DELETEs
+    when the app-server lives on a remote host."""
+
+    def setUp(self):
+        import importlib
+
+        self.eph = importlib.import_module("zcode_mcp.ephemeral")
+        with self.eph._lock:
+            self.eph._sessions.clear()
+            self.eph._inflight.clear()
+        self._orig_reap_cycle = self.eph._reap_cycle
+        self.eph._reap_cycle = lambda ttl=None: 0
+
+    def tearDown(self):
+        self.eph._reap_cycle = self._orig_reap_cycle
+        with self.eph._lock:
+            self.eph._sessions.clear()
+            self.eph._inflight.clear()
+
+    def test_remote_reap_closes_without_local_delete(self):
+        import zcode_mcp.config as cfg
+        import zcode_mcp.store as store
+
+        calls, closes = [], []
+        orig = (cfg.REMOTE_MODE, store.discard_session, self.eph._turn_running)
+        cfg.REMOTE_MODE = "ssh"
+        store.discard_session = lambda sid: calls.append(sid) or {"session": 1}
+        self.eph._turn_running = lambda sid: False
+        closed = type("T", (), {"alive": False})  # transport closed -> skip close RPC
+        try:
+            import zcode_mcp.appserver as appserver
+
+            orig_transport = appserver.SERVER._transport
+            appserver.SERVER._transport = closed
+            self.eph.register("sess_r1")
+            with self.eph._lock:
+                self.eph._sessions["sess_r1"] -= 10**6
+            self.assertTrue(self.eph._reap_one("sess_r1"))
+            self.assertEqual(calls, [])  # no local DELETE
+            self.assertFalse(self.eph.is_temporary("sess_r1"))  # unregistered
+            appserver.SERVER._transport = orig_transport
+        finally:
+            cfg.REMOTE_MODE, store.discard_session, self.eph._turn_running = orig
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
 if __name__ == "__main__":
     unittest.main()

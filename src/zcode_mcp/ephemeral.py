@@ -117,10 +117,10 @@ def _end_runtime_session(sid: str) -> None:
     try:
         from .appserver import SERVER
 
-        proc = SERVER._proc
+        transport = SERVER._transport
     except Exception:
         return
-    if proc is None or proc.poll() is not None:
+    if transport is None or not transport.alive:
         return
     try:
         from .protocol import stop_session
@@ -147,9 +147,28 @@ def _reap_one(sid: str, force: bool = False, ttl: float | None = None) -> bool:
             return False
     if not force and _turn_running(sid):
         return False
+    _end_runtime_session(sid)
+    if config.REMOTE_MODE != "local":
+        # cloud link: the session rows live in the remote host's SQLite, which
+        # this bridge cannot touch; close the runtime session and stop
+        # tracking instead of deleting the wrong machine's rows
+        with _lock:
+            _sessions.pop(sid, None)
+            _inflight.pop(sid, None)
+        try:
+            from .appserver import SERVER
+
+            with SERVER._monitors_lock:
+                SERVER.monitors.pop(sid, None)
+        except Exception:
+            pass
+        log(
+            f"temp reaper: closed temporary conversation {sid} over the cloud "
+            "link; its rows remain in the remote session store"
+        )
+        return True
     from .store import discard_session  # late import: tests monkeypatch it
 
-    _end_runtime_session(sid)
     try:
         discard_session(sid)
     except Exception as e:

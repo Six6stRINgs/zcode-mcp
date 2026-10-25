@@ -118,6 +118,9 @@ ZCode starts with zero context about your conversation. Include in `text`:
 - `zcode_session_list {}` shows active conversations (archived hidden;
   temporary ones marked `[temporary]`);
   `zcode_session_list {include_archived: true}` shows everything with markers.
+- Over a cloud link (remote app-server via `ZCODE_MCP_REMOTE_SSH` / `ZCODE_MCP_REMOTE_TCP`),
+  temporary workers still self-clean their runtime session, but their rows
+  remain in the remote host's store — clean the sidebar there if it matters.
 
 ## Model choice per worker
 

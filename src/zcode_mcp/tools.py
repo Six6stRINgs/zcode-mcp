@@ -49,6 +49,20 @@ def _effective_timeout(args: dict) -> int:
     return max(1, min(int(args.get("timeout_sec") or DEFAULT_TIMEOUT), budget))
 
 
+def _remote_store_guard(tool: str) -> str | None:
+    """Error text when a tool would write the LOCAL shared store while the
+    app-server lives on a remote host (cloud link): its session rows are in
+    the remote SQLite, unreachable from here. None means local mode."""
+    if _config.REMOTE_MODE == "local":
+        return None
+    return (
+        f"error: {tool} operates on the local ZCode session store, which is not "
+        f"the one this cloud-linked app-server writes to (remote mode: "
+        f"{_config.REMOTE_MODE}). Run the equivalent command on the remote host "
+        f"or reconnect locally."
+    )
+
+
 def _ensure_catalogue(cwd: str | None = None) -> list:
     """Full model catalogue; probes with a throwaway session when cold."""
     available = _available_from_cache()
@@ -335,6 +349,12 @@ def tool_zcode_session_diff(args: dict) -> str:
     if session is None:
         return _not_found(sid)
     workspace = (session.get("workspace") or {}).get("workspacePath")
+    if _config.REMOTE_MODE != "local":
+        return (
+            f"error: the session workspace ({workspace}) lives on the remote "
+            f"host; git diff is a local operation over the cloud link. Run git "
+            f"on the remote host or reconnect locally."
+        )
     if not workspace or not os.path.isdir(workspace):
         return f"error: workspace not found for session: {sid}"
     try:
@@ -365,25 +385,30 @@ def tool_zcode_session_diff(args: dict) -> str:
 
 def tool_zcode_health(args: dict) -> str:
     """Report bridge and app-server health without creating a conversation."""
-    try:
-        zcode_cjs = _config.resolve_zcode_cjs()
-        cjs_ok = os.path.isfile(zcode_cjs)
-    except Exception as e:
-        zcode_cjs = None
-        cjs_ok = False
-        cjs_error = str(e)
-    proc = SERVER._proc
-    app_state = "running" if proc is not None and proc.poll() is None else "not_started"
+    transport = SERVER._transport
     result = {
         "bridge": "ok",
         "server_version": getattr(__import__("zcode_mcp"), "__version__", None),
-        "node": {"executable": NODE_EXE, "available": shutil.which(NODE_EXE) is not None or os.path.isfile(NODE_EXE)},
-        "zcode_cli": {"path": zcode_cjs, "available": cjs_ok},
-        "app_server": {"state": app_state, "storage_ready": bool(getattr(SERVER, "_storage_ready", False))},
+        "transport": {
+            "mode": _config.REMOTE_MODE,
+            "target": transport.desc if transport else None,
+            "state": "running" if transport is not None and transport.alive else "not_started",
+        },
+        "app_server": {"state": "running" if transport is not None and transport.alive else "not_started", "storage_ready": bool(getattr(SERVER, "_storage_ready", False))},
         "model_catalog_cached": SERVER.last_models is not None,
     }
-    if not cjs_ok:
-        result["zcode_cli"]["error"] = cjs_error
+    if _config.REMOTE_MODE == "local":
+        try:
+            zcode_cjs = _config.resolve_zcode_cjs()
+            cjs_ok = os.path.isfile(zcode_cjs)
+        except Exception as e:
+            zcode_cjs = None
+            cjs_ok = False
+            cjs_error = str(e)
+        result["node"] = {"executable": NODE_EXE, "available": shutil.which(NODE_EXE) is not None or os.path.isfile(NODE_EXE)}
+        result["zcode_cli"] = {"path": zcode_cjs, "available": cjs_ok}
+        if not cjs_ok:
+            result["zcode_cli"]["error"] = cjs_error
     return json.dumps(result, ensure_ascii=False, indent=1)
 
 
@@ -587,6 +612,9 @@ def tool_zcode_session_stop(args: dict) -> str:
 def tool_zcode_session_archive(args: dict) -> str:
     sid = args["session_id"]
     unarchive = bool(args.get("unarchive", False))
+    guard = _remote_store_guard("zcode_session_archive")
+    if guard:
+        return guard
     if not session_exists(sid):
         return _not_found_msg(f"error: session not found in session store: {sid}", sid)
     res = set_session_archived(sid, not unarchive)
@@ -603,6 +631,9 @@ def tool_zcode_session_archive(args: dict) -> str:
 def tool_zcode_session_discard(args: dict) -> str:
     sid = args["session_id"]
     confirm = bool(args.get("confirm", False))
+    guard = _remote_store_guard("zcode_session_discard")
+    if guard:
+        return guard
     try:
         scope = discard_scope(sid)
     except Exception as e:

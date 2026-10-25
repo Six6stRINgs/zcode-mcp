@@ -160,6 +160,12 @@ Statuses you can see from a blocked/collected turn:
 
 ## Caveats
 
+- Over a cloud link (`ZCODE_MCP_REMOTE_SSH` or `ZCODE_MCP_REMOTE_TCP` set) the
+  app-server runs on a remote host: the session store is the remote machine's,
+  so `zcode_session_archive` / `zcode_session_discard` refuse, `zcode_session_diff`
+  points you at the remote host, and temporary-session cleanup closes the
+  runtime session without deleting remote rows. All conversation tools and
+  `zcode_models` work unchanged; `zcode_quota` still reports the local plans.
 - Codex headless (`codex exec`) rejects MCP calls under its default
   approval policy — use `--dangerously-bypass-approvals-and-sandbox` or
   `--approve-for-me` for automation.

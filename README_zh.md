@@ -40,6 +40,20 @@ claude mcp add zcode-mcp -- uvx --from "git+https://github.com/Six6stRINgs/zcode
 
 若 ZCode 安装在非默认目录，可通过环境变量 `ZCODE_CJS` 指定其 `zcode.cjs` 核心入口路径。在无头自动化环境中执行时，需根据宿主客户端策略配置相应的工具审批权限。
 
+## 云端链接
+
+app-server 协议本质是字节流上的纯 NDJSON，因此桥可以驱动任何可达机器上的 ZCode app-server，而不限于本地。远程主机只需装有已登录的 ZCode CLI；走 SSH 传输时无需在服务器上额外部署守护进程。设置以下任一变量即切换传输方式：
+
+| 环境变量 | 用途 |
+| --- | --- |
+| `ZCODE_MCP_REMOTE_SSH` | SSH 目标（如 `user@10.0.0.8`）；桥通过 ssh 管道拉起远程 CLI |
+| `ZCODE_MCP_SSH_ARGS` | 额外 ssh 参数（端口、密钥等）；必须使用密钥认证——交互式密码提示无法应答 |
+| `ZCODE_MCP_REMOTE_CJS` | 远程入口：`zcode.cjs` 绝对路径（经 node 启动）或裸 CLI 命令名；默认取远程 PATH 中的 `zcode` |
+| `ZCODE_MCP_REMOTE_WORKSPACE` | 传给远程 app-server `--cwd` 的工作目录（默认 `.`） |
+| `ZCODE_MCP_REMOTE_TCP` | 远程裸 app-server 套接字的 `host:port`；同时设置时优先于 SSH |
+
+云端链接的既定语义：会话数据存放在远程主机的存储中，因此本地库操作按设计降级——`zcode_session_archive` / `zcode_session_discard` 拒绝执行并给出指引，`zcode_session_diff` 指向远程主机执行，临时会话清理只关闭运行时会话而不删除远程数据行。`zcode_models` 与全部会话工具行为不变；`zcode_quota` 报告的仍是本地机器的套餐。`zcode_health` 会报告当前激活的传输方式。
+
 ## 内置技能 (Skills)
 
 仓库内置 3 个标准化 SKILL.md，用于为 MCP Agent 提供编排与调度规则：

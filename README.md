@@ -40,6 +40,20 @@ claude mcp add zcode-mcp -- uvx --from "git+https://github.com/Six6stRINgs/zcode
 
 For non-standard ZCode installations, set the `ZCODE_CJS` environment variable to the path of `zcode.cjs`. Configure execution approval settings in headless environments according to client security policies.
 
+## Cloud Link
+
+The app-server protocol is plain NDJSON over a byte stream, so the bridge can drive a ZCode app-server on any reachable machine instead of a local one. The remote host needs a logged-in ZCode CLI; with SSH transport no extra server-side daemon is required. Set one variable to switch transports:
+
+| Environment Variable | Purpose |
+| --- | --- |
+| `ZCODE_MCP_REMOTE_SSH` | SSH destination (e.g. `user@10.0.0.8`); the bridge spawns the remote CLI over the ssh pipe |
+| `ZCODE_MCP_SSH_ARGS` | Extra ssh arguments (port, key file); key-based auth is required — interactive password prompts cannot be answered |
+| `ZCODE_MCP_REMOTE_CJS` | Remote entry: absolute `zcode.cjs` path (run via node) or a bare CLI command name; default `zcode` from the remote PATH |
+| `ZCODE_MCP_REMOTE_WORKSPACE` | Remote working directory passed as app-server `--cwd` (default `.`) |
+| `ZCODE_MCP_REMOTE_TCP` | `host:port` of a raw remotely-exposed app-server socket; takes precedence over SSH when both are set |
+
+Cloud-link semantics by design: session data lives in the remote host's stores, so local-store operations degrade — `zcode_session_archive` / `zcode_session_discard` refuse with guidance, `zcode_session_diff` points at the remote host, and temporary-session cleanup closes the runtime session without deleting remote rows. `zcode_models` and all conversation tools work unchanged; `zcode_quota` still reports the local machine's plans. `zcode_health` reports the active transport.
+
 ## Built-in Skills
 
 The repository includes three standardized SKILL.md documents to guide agents on tool usage and orchestration:

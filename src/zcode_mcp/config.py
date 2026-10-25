@@ -62,6 +62,25 @@ IMAGE_EXT = {".png", ".jpg", ".jpeg", ".gif", ".webp", ".bmp", ".svg"}
 AUDIO_EXT = {".mp3", ".wav", ".ogg", ".m4a", ".flac"}
 VIDEO_EXT = {".mp4", ".mov", ".webm", ".mkv", ".avi"}
 
+# -- cloud link (remote app-server transport) -------------------------------
+# The app-server protocol is plain NDJSON over a byte stream, so the bridge
+# can drive a ZCode app-server on any reachable machine: SSH (spawns the
+# remote CLI over an ssh pipe, same wire) or TCP (a raw socket to a
+# remotely-exposed app-server). Empty values mean local spawn (default).
+# ZCODE_MCP_REMOTE_SSH   e.g. "user@10.0.0.8" (ssh destination)
+# ZCODE_MCP_SSH_ARGS     extra ssh argv, e.g. "-p 2222 -i /path/key"
+# ZCODE_MCP_REMOTE_CJS   remote entry: path to zcode.cjs (run via node) or a
+#                        bare CLI command name; empty = "zcode" from remote PATH
+# ZCODE_MCP_REMOTE_WORKSPACE  remote --cwd for the app-server (default ".")
+# ZCODE_MCP_REMOTE_TCP   e.g. "10.0.0.8:8765" (raw NDJSON socket; takes
+#                        precedence over SSH when both are set)
+REMOTE_SSH = os.environ.get("ZCODE_MCP_REMOTE_SSH", "").strip()
+REMOTE_SSH_ARGS = os.environ.get("ZCODE_MCP_SSH_ARGS", "").strip()
+REMOTE_CJS = os.environ.get("ZCODE_MCP_REMOTE_CJS", "").strip()
+REMOTE_WORKSPACE = os.environ.get("ZCODE_MCP_REMOTE_WORKSPACE", ".").strip()
+REMOTE_TCP = os.environ.get("ZCODE_MCP_REMOTE_TCP", "").strip()
+REMOTE_MODE = "tcp" if REMOTE_TCP else "ssh" if REMOTE_SSH else "local"
+
 # Schema-required answer for the server's runtime-preferences reverse request
 RUNTIME_PREFS_RESULT = {
     "nativeSearchEnhancementsEnabled": False,
