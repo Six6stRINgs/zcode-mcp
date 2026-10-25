@@ -35,7 +35,7 @@ ZCODE_V2_CONFIG = os.environ.get(
 PROVIDER_CONFIG_PATH = os.environ.get(
     "ZCODE_MCP_PROVIDER_CONFIG", os.path.join(ZCODE_HOME, "v2", "provider_config.json")
 )
-APP_VERSION = os.environ.get("ZCODE_MCP_APP_VERSION", "3.14.4")
+APP_VERSION = os.environ.get("ZCODE_MCP_APP_VERSION", "3.16.3")
 CREDENTIALS_PATH = os.environ.get(
     "ZCODE_MCP_CREDENTIALS", os.path.join(ZCODE_HOME, "v2", "credentials.json")
 )

@@ -21,7 +21,7 @@ ZCode 的 Model Context Protocol (MCP) 桥接服务。
 
 - **Python**：≥ 3.9
 - **Node.js**：系统已安装或使用 ZCode 桌面端内置运行时
-- **ZCode**：已安装并完成登录的 ZCode 桌面端或 CLI（推荐 0.16.x 及以上）
+- **ZCode**：已安装并完成登录的 ZCode 桌面端或 CLI（推荐 0.16.x 及以上，已实测 0.17.0）
 - **操作系统**：跨平台支持（Windows、Linux、macOS），自动探测各平台标准安装路径
 
 ## 接入配置
@@ -128,7 +128,7 @@ Copy-Item -Recurse -Force skills\* $env:USERPROFILE\.codex\skills\
 | `ZCODE_MCP_CREDENTIALS` | `$ZCODE_HOME/v2/credentials.json` | 额度认证凭据路径覆盖 |
 | `ZCODE_MCP_ZCODE_CONFIG` | `$ZCODE_HOME/v2/config.json` | 用户全局配置文件路径覆盖 |
 | `ZCODE_MCP_PROVIDER_CONFIG` | `$ZCODE_HOME/v2/provider_config.json` | Provider 注册表文件路径覆盖 |
-| `ZCODE_MCP_APP_VERSION` | `3.14.4` | 请求套餐额度接口时使用的客户端版本标识 |
+| `ZCODE_MCP_APP_VERSION` | `3.16.3` | 请求套餐额度接口时使用的客户端版本标识 |
 
 ## 运行架构
 

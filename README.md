@@ -21,7 +21,7 @@ Connects local ZCode runtime capabilities into external AI agent workflows (such
 
 - **Python**: ≥ 3.9
 - **Node.js**: System installation or the runtime bundled with ZCode Desktop
-- **ZCode**: Installed and logged in via ZCode Desktop or CLI (0.16.x or newer)
+- **ZCode**: Installed and logged in via ZCode Desktop or CLI (0.16.x or newer, tested against 0.17.0)
 - **Operating System**: Cross-platform (Windows, Linux, macOS); standard installation paths detected automatically on each platform
 
 ## Setup
@@ -128,7 +128,7 @@ Model parameters follow the standardized pattern:
 | `ZCODE_MCP_CREDENTIALS` | `$ZCODE_HOME/v2/credentials.json` | Overrides the OAuth credentials file path |
 | `ZCODE_MCP_ZCODE_CONFIG` | `$ZCODE_HOME/v2/config.json` | Overrides the user configuration file path |
 | `ZCODE_MCP_PROVIDER_CONFIG` | `$ZCODE_HOME/v2/provider_config.json` | Overrides the provider registry file path |
-| `ZCODE_MCP_APP_VERSION` | `3.14.4` | Client version sent in quota balance requests |
+| `ZCODE_MCP_APP_VERSION` | `3.16.3` | Client version sent in quota balance requests |
 
 ## Architecture
 
