@@ -171,6 +171,11 @@ Statuses you can see from a blocked/collected turn:
   the bridge run `session/resume` for that session and retry the call once, so
   `zcode_session_read` / `zcode_session_output` / `zcode_session_send` keep
   working on stored sessions without manual steps.
+- Bridge-driven turns do not live-stream into the ZCode desktop: events only
+  flow to subscribers of the process driving the turn, and the bridge runs its
+  own app-server. Tell the user to reopen the conversation in the desktop to
+  see new messages (fresh read from the shared store); the sidebar refreshes
+  on window focus. Streaming via `zcode_session_output` is unaffected.
 - Codex headless (`codex exec`) rejects MCP calls under its default
   approval policy — use `--dangerously-bypass-approvals-and-sandbox` or
   `--approve-for-me` for automation.

@@ -10,7 +10,7 @@ Connects local ZCode runtime capabilities into external AI agent workflows (such
 
 ## Key Features
 
-- **Bidirectional Desktop Sync**: Interacts via ZCode's native app-server protocol; sessions mirror directly to the desktop interface for real-time inspection or manual takeover.
+- **Shared Sessions with the Desktop App**: Sessions persist to ZCode's shared session store and appear in the desktop app, where they can be opened and continued from either side. Live streaming only flows to the process driving a turn: bridge-driven messages show up in the desktop when the conversation is reopened (fresh read from the store), and the sidebar refreshes on window focus.
 - **Automated Lifecycle Management**: Manages temporary session lifecycles with idle timeout cleanup to prevent session clutter.
 - **Model Orchestration**: Supports dynamic switching across configured providers and configurable reasoning effort levels.
 - **Observability & Streaming**: Real-time turn state tracking, output polling, and tool budget timeout protection.
@@ -164,6 +164,7 @@ Local SQLite Storage & Workspace Files ◄──► ZCode Desktop App
 ## Considerations
 
 - **Desktop-Only Account Sources**: Models tied exclusively to desktop account sources cannot be addressed in headless sessions; use providers with standard API access.
+- **No Live Streaming into the Desktop**: ZCode has no cross-process event bus — turn events only flow to subscribers of the app-server process driving the turn. The bridge spawns its own app-server, so bridge-driven messages do not live-stream into an open desktop view: reopen the conversation in the desktop to see them (fresh read from the shared store); the sidebar refreshes on window focus. Turn streaming for MCP clients is unaffected (`zcode_session_output` polls it live).
 - **No Autonomous Model Switching**: When the model in use exhausts its quota mid-task, the agent must pause and ask the user which model to continue on; switching models without the user's explicit instruction is forbidden. The bundled skills enforce this rule.
 - **Local Environment**: Requires a local ZCode desktop or CLI installation with an active login session.
 - **Permanent Deletion**: The `zcode_session_discard` tool irreversibly deletes conversation data.
