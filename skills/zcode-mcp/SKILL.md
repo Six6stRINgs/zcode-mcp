@@ -166,6 +166,11 @@ Statuses you can see from a blocked/collected turn:
   points you at the remote host, and temporary-session cleanup closes the
   runtime session without deleting remote rows. All conversation tools and
   `zcode_models` work unchanged; `zcode_quota` still reports the local plans.
+- Touching a session created by an earlier app-server process (bridge restart,
+  cloud link) is transparent: a `-32004 Session is not active` rejection makes
+  the bridge run `session/resume` for that session and retry the call once, so
+  `zcode_session_read` / `zcode_session_output` / `zcode_session_send` keep
+  working on stored sessions without manual steps.
 - Codex headless (`codex exec`) rejects MCP calls under its default
   approval policy — use `--dangerously-bypass-approvals-and-sandbox` or
   `--approve-for-me` for automation.

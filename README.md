@@ -52,7 +52,7 @@ The app-server protocol is plain NDJSON over a byte stream, so the bridge can dr
 | `ZCODE_MCP_REMOTE_WORKSPACE` | Remote working directory passed as app-server `--cwd` (default `.`) |
 | `ZCODE_MCP_REMOTE_TCP` | `host:port` of a raw remotely-exposed app-server socket; takes precedence over SSH when both are set |
 
-Cloud-link semantics by design: session data lives in the remote host's stores, so local-store operations degrade — `zcode_session_archive` / `zcode_session_discard` refuse with guidance, `zcode_session_diff` points at the remote host, and temporary-session cleanup closes the runtime session without deleting remote rows. `zcode_models` and all conversation tools work unchanged; `zcode_quota` still reports the local machine's plans. `zcode_health` reports the active transport.
+Cloud-link semantics by design: session data lives in the remote host's stores, so local-store operations degrade — `zcode_session_archive` / `zcode_session_discard` refuse with guidance, `zcode_session_diff` points at the remote host, and temporary-session cleanup closes the runtime session without deleting remote rows. `zcode_models` and all conversation tools work unchanged; `zcode_quota` still reports the local machine's plans. `zcode_health` reports the active transport. Sessions created by an earlier app-server process are transparently re-activated: on a `-32004 Session is not active` rejection the bridge runs `session/resume` and retries the call once.
 
 ## Built-in Skills
 

@@ -376,7 +376,9 @@ class AppServer:
 
     # -- public -------------------------------------------------------------
 
-    def request(self, method: str, params: dict, timeout: float = 30) -> Any:
+    def request(
+        self, method: str, params: dict, timeout: float = 30, _resumed: bool = False
+    ) -> Any:
         self.ensure()
         with self._pending_lock:
             rid = next(self._ids)
@@ -398,6 +400,31 @@ class AppServer:
         )
         if "error" in resp:
             err = resp["error"]
+            # A freshly-spawned app-server has no sessions in memory: touching
+            # one created by an earlier process (bridge restart, cloud link)
+            # fails with -32004 "Session is not active". session/resume loads
+            # the persisted session into the runtime; retry the original call
+            # exactly once afterwards.
+            if (
+                str(err.get("code")) == "-32004"
+                and not _resumed
+                and method.startswith("session/")
+                and method != "session/resume"
+                and isinstance(params, dict)
+                and params.get("sessionId")
+            ):
+                sid = str(params["sessionId"])
+                log(
+                    f"-32004 on {method} for {sid}; auto-resuming session, "
+                    "then retrying once"
+                )
+                self.request(
+                    "session/resume",
+                    {"sessionId": sid},
+                    timeout=max(timeout, 60.0),
+                    _resumed=True,
+                )
+                return self.request(method, params, timeout=timeout, _resumed=True)
             raise RuntimeError(
                 f"app-server {method} error {err.get('code')}: {err.get('message')}"
             )

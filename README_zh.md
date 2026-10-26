@@ -52,7 +52,7 @@ app-server 协议本质是字节流上的纯 NDJSON，因此桥可以驱动任�
 | `ZCODE_MCP_REMOTE_WORKSPACE` | 传给远程 app-server `--cwd` 的工作目录（默认 `.`） |
 | `ZCODE_MCP_REMOTE_TCP` | 远程裸 app-server 套接字的 `host:port`；同时设置时优先于 SSH |
 
-云端链接的既定语义：会话数据存放在远程主机的存储中，因此本地库操作按设计降级——`zcode_session_archive` / `zcode_session_discard` 拒绝执行并给出指引，`zcode_session_diff` 指向远程主机执行，临时会话清理只关闭运行时会话而不删除远程数据行。`zcode_models` 与全部会话工具行为不变；`zcode_quota` 报告的仍是本地机器的套餐。`zcode_health` 会报告当前激活的传输方式。
+云端链接的既定语义：会话数据存放在远程主机的存储中，因此本地库操作按设计降级——`zcode_session_archive` / `zcode_session_discard` 拒绝执行并给出指引，`zcode_session_diff` 指向远程主机执行，临时会话清理只关闭运行时会话而不删除远程数据行。`zcode_models` 与全部会话工具行为不变；`zcode_quota` 报告的仍是本地机器的套餐。`zcode_health` 会报告当前激活的传输方式。由先前 app-server 进程创建的存量会话会被透明激活：遇到 `-32004 Session is not active` 拒绝时，桥自动执行 `session/resume` 并重试原调用一次。
 
 ## 内置技能 (Skills)
 
